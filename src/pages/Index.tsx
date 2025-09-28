@@ -1,10 +1,11 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Cloud, Database, Zap, FileText } from "lucide-react";
+import { Cloud, Database, Zap, FileText, Upload } from "lucide-react";
 import ArchitectureDiagram from "@/components/ArchitectureDiagram";
 import DataFlowSteps from "@/components/DataFlowSteps";
 import AzureServices from "@/components/AzureServices";
 import TechnicalSpecs from "@/components/TechnicalSpecs";
+import DocumentUpload from "@/components/DocumentUpload";
 
 const Index = () => {
   return (
@@ -48,11 +49,12 @@ const Index = () => {
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
         <Tabs defaultValue="architecture" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-8">
+          <TabsList className="grid w-full grid-cols-5 mb-8">
             <TabsTrigger value="architecture">Architecture</TabsTrigger>
             <TabsTrigger value="dataflow">Data Flow</TabsTrigger>
             <TabsTrigger value="services">Azure Services</TabsTrigger>
             <TabsTrigger value="specs">Technical Specs</TabsTrigger>
+            <TabsTrigger value="demo">Live Demo</TabsTrigger>
           </TabsList>
 
           <TabsContent value="architecture" className="space-y-8">
@@ -92,6 +94,19 @@ const Index = () => {
                 Comprehensive technical details including security, performance, and operational considerations.
               </p>
               <TechnicalSpecs />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="demo" className="space-y-8">
+            <div>
+              <h3 className="text-2xl font-semibold text-foreground mb-4 flex items-center gap-2">
+                <Upload className="h-6 w-6" />
+                Live Document Processing Demo
+              </h3>
+              <p className="text-muted-foreground mb-6">
+                Upload PDF documents to test the document processing pipeline. Connect to your Python FastAPI backend for real-time processing.
+              </p>
+              <DocumentUpload />
             </div>
           </TabsContent>
         </Tabs>
