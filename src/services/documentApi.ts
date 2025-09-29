@@ -1,86 +1,158 @@
+import { supabase } from "@/integrations/supabase/client";
+
 export interface DocumentUploadResponse {
   id: string;
   filename: string;
-  extracted_text: string;
-  status: 'processing' | 'completed' | 'error';
+  status: 'pending' | 'processing' | 'completed' | 'error';
+  job_id?: string;
+  message?: string;
 }
 
-export interface BillOfMaterialsItem {
-  item: string;
-  quantity: number;
-  unit_price: number;
+export interface VendorData {
+  id: string;
+  vendorName: string;
+  quotedPrice: number;
+  calculatedTCO: number;
+  leadTime: number;
+  riskScore: number;
+  items: number;
+  currency: string;
+  riskFactors: string[];
+  tcoBreakdown: {
+    quotedPrice: number;
+    shippingCosts: number;
+    handlingFees: number;
+    riskPremium: number;
+    qualityAdjustment: number;
+  };
 }
 
-export interface DocumentAnalysisResult {
-  bill_of_materials: BillOfMaterialsItem[];
-  normalized_data: Record<string, any>;
-  raw_ocr_data: any;
+export interface ProcessingResults {
+  job_id: string;
+  status: string;
+  results: VendorData[];
+  summary: {
+    totalVendors: number;
+    recommendedVendor: string | null;
+    avgTCO: number;
+    highRiskCount: number;
+  };
 }
 
 class DocumentAPI {
   private baseUrl: string;
 
-  constructor(baseUrl: string = 'http://localhost:8000') {
-    this.baseUrl = baseUrl;
+  constructor() {
+    this.baseUrl = 'https://***REMOVED***.supabase.co/functions/v1';
+  }
+
+  private async getAuthHeaders() {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session?.access_token) {
+      throw new Error('User not authenticated');
+    }
+
+    return {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json'
+    };
   }
 
   async uploadDocument(file: File): Promise<DocumentUploadResponse> {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session?.access_token) {
+      throw new Error('User not authenticated');
+    }
+
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`${this.baseUrl}/upload-document/`, {
+    const response = await fetch(`${this.baseUrl}/upload-document`, {
       method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      },
       body: formData,
     });
 
     if (!response.ok) {
-      throw new Error(`Upload failed: ${response.statusText}`);
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Upload failed: ${response.statusText}`);
     }
 
     return response.json();
   }
 
-  async getDocumentAnalysis(documentId: string): Promise<DocumentAnalysisResult> {
-    const response = await fetch(`${this.baseUrl}/analyze-document/${documentId}`);
+  async processDocument(documentId: string): Promise<{ job_id: string; status: string; message: string }> {
+    const headers = await this.getAuthHeaders();
+
+    const response = await fetch(`${this.baseUrl}/process-document`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ document_id: documentId })
+    });
     
     if (!response.ok) {
-      throw new Error(`Analysis failed: ${response.statusText}`);
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Processing failed: ${response.statusText}`);
     }
 
     return response.json();
   }
 
-  async extractBillOfMaterials(ocrData: any): Promise<BillOfMaterialsItem[]> {
-    const response = await fetch(`${this.baseUrl}/extract-bom/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ ocr_data: ocrData }),
+  async getResults(jobId: string): Promise<ProcessingResults> {
+    const headers = await this.getAuthHeaders();
+
+    const response = await fetch(`${this.baseUrl}/get-results/${jobId}`, {
+      method: 'GET',
+      headers
     });
 
     if (!response.ok) {
-      throw new Error(`BOM extraction failed: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    return result.bill_of_materials;
-  }
-
-  async normalizeTextData(textData: Record<string, string>): Promise<Record<string, string>> {
-    const response = await fetch(`${this.baseUrl}/normalize-text/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(textData),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Text normalization failed: ${response.statusText}`);
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Failed to get results: ${response.statusText}`);
     }
 
     return response.json();
+  }
+
+  async pollJobStatus(jobId: string, onProgress?: (progress: number) => void): Promise<ProcessingResults> {
+    const maxAttempts = 30; // 30 attempts with 2-second intervals = 1 minute max
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      try {
+        const result = await this.getResults(jobId);
+        
+        if (result.status === 'completed') {
+          return result;
+        }
+        
+        if (result.status === 'failed') {
+          throw new Error('Document processing failed');
+        }
+
+        // Update progress if callback provided
+        if (onProgress && 'progress' in result) {
+          onProgress((result as any).progress || 0);
+        }
+
+        // Wait 2 seconds before next poll
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        attempts++;
+        
+      } catch (error) {
+        if (attempts === maxAttempts - 1) {
+          throw error;
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        attempts++;
+      }
+    }
+
+    throw new Error('Processing timeout - please try again');
   }
 }
 

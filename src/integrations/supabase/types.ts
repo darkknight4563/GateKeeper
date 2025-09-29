@@ -14,7 +14,235 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      documents: {
+        Row: {
+          created_at: string
+          file_path: string
+          file_size: number
+          filename: string
+          id: string
+          mime_type: string
+          updated_at: string
+          upload_status: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          file_path: string
+          file_size: number
+          filename: string
+          id?: string
+          mime_type: string
+          updated_at?: string
+          upload_status?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          file_path?: string
+          file_size?: number
+          filename?: string
+          id?: string
+          mime_type?: string
+          updated_at?: string
+          upload_status?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      lead_time_analysis: {
+        Row: {
+          confidence_level: number | null
+          created_at: string
+          estimated_lead_time: number
+          factors: Json | null
+          id: string
+          vendor_offer_id: string
+        }
+        Insert: {
+          confidence_level?: number | null
+          created_at?: string
+          estimated_lead_time: number
+          factors?: Json | null
+          id?: string
+          vendor_offer_id: string
+        }
+        Update: {
+          confidence_level?: number | null
+          created_at?: string
+          estimated_lead_time?: number
+          factors?: Json | null
+          id?: string
+          vendor_offer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_time_analysis_vendor_offer_id_fkey"
+            columns: ["vendor_offer_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_offers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processing_jobs: {
+        Row: {
+          created_at: string
+          document_id: string
+          error_message: string | null
+          id: string
+          job_status: string
+          job_type: string
+          progress: number | null
+          result_data: Json | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          document_id: string
+          error_message?: string | null
+          id?: string
+          job_status?: string
+          job_type?: string
+          progress?: number | null
+          result_data?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          document_id?: string
+          error_message?: string | null
+          id?: string
+          job_status?: string
+          job_type?: string
+          progress?: number | null
+          result_data?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processing_jobs_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      risk_assessments: {
+        Row: {
+          assessment_data: Json | null
+          created_at: string
+          id: string
+          risk_factors: Json
+          risk_score: number
+          vendor_offer_id: string
+        }
+        Insert: {
+          assessment_data?: Json | null
+          created_at?: string
+          id?: string
+          risk_factors: Json
+          risk_score: number
+          vendor_offer_id: string
+        }
+        Update: {
+          assessment_data?: Json | null
+          created_at?: string
+          id?: string
+          risk_factors?: Json
+          risk_score?: number
+          vendor_offer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "risk_assessments_vendor_offer_id_fkey"
+            columns: ["vendor_offer_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_offers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tco_calculations: {
+        Row: {
+          breakdown: Json
+          calculated_tco: number
+          calculation_method: string | null
+          created_at: string
+          id: string
+          vendor_offer_id: string
+        }
+        Insert: {
+          breakdown: Json
+          calculated_tco: number
+          calculation_method?: string | null
+          created_at?: string
+          id?: string
+          vendor_offer_id: string
+        }
+        Update: {
+          breakdown?: Json
+          calculated_tco?: number
+          calculation_method?: string | null
+          created_at?: string
+          id?: string
+          vendor_offer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tco_calculations_vendor_offer_id_fkey"
+            columns: ["vendor_offer_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_offers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendor_offers: {
+        Row: {
+          created_at: string
+          currency: string
+          document_id: string
+          extracted_data: Json | null
+          id: string
+          items_count: number | null
+          quoted_price: number
+          updated_at: string
+          vendor_name: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          document_id: string
+          extracted_data?: Json | null
+          id?: string
+          items_count?: number | null
+          quoted_price: number
+          updated_at?: string
+          vendor_name: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          document_id?: string
+          extracted_data?: Json | null
+          id?: string
+          items_count?: number | null
+          quoted_price?: number
+          updated_at?: string
+          vendor_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_offers_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

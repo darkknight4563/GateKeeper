@@ -3,13 +3,13 @@ import { Upload, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-reac
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { documentApi, type DocumentUploadResponse, type BillOfMaterialsItem } from '@/services/documentApi';
+import { documentApi, type DocumentUploadResponse, type VendorData } from '@/services/documentApi';
 import { useToast } from '@/hooks/use-toast';
 
 const DocumentUpload = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedDoc, setUploadedDoc] = useState<DocumentUploadResponse | null>(null);
-  const [billOfMaterials, setBillOfMaterials] = useState<BillOfMaterialsItem[]>([]);
+  const [vendorResults, setVendorResults] = useState<VendorData[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { toast } = useToast();
 
@@ -54,12 +54,27 @@ const DocumentUpload = () => {
   const analyzeDocument = async (documentId: string) => {
     setIsAnalyzing(true);
     try {
-      const analysis = await documentApi.getDocumentAnalysis(documentId);
-      setBillOfMaterials(analysis.bill_of_materials);
+      // Start document processing
+      const processResult = await documentApi.processDocument(documentId);
+      
+      toast({
+        title: "Processing started",
+        description: "Document is being analyzed for vendor data extraction",
+      });
+      
+      // Poll for results with progress updates
+      const results = await documentApi.pollJobStatus(
+        processResult.job_id,
+        (progress) => {
+          console.log(`Processing progress: ${progress}%`);
+        }
+      );
+      
+      setVendorResults(results.results);
       
       toast({
         title: "Analysis complete",
-        description: `Extracted ${analysis.bill_of_materials.length} items from Bill of Materials`,
+        description: `Extracted data from ${results.results.length} vendor${results.results.length !== 1 ? 's' : ''}`,
       });
     } catch (error) {
       toast({
@@ -162,7 +177,7 @@ const DocumentUpload = () => {
                 <p className="text-muted-foreground">{uploadedDoc.filename}</p>
               </div>
               
-              {uploadedDoc.status === 'completed' && !isAnalyzing && billOfMaterials.length === 0 && (
+              {uploadedDoc.status === 'completed' && !isAnalyzing && vendorResults.length === 0 && (
                 <Button 
                   onClick={() => analyzeDocument(uploadedDoc.id)}
                   className="w-full"
@@ -174,7 +189,7 @@ const DocumentUpload = () => {
               {isAnalyzing && (
                 <div className="flex items-center gap-2 text-azure">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Analyzing document for Bill of Materials...
+                  Analyzing document for vendor data extraction...
                 </div>
               )}
             </div>
@@ -182,44 +197,62 @@ const DocumentUpload = () => {
         </Card>
       )}
 
-      {/* Bill of Materials Results */}
-      {billOfMaterials.length > 0 && (
+      {/* Vendor Analysis Results */}
+      {vendorResults.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Extracted Bill of Materials</CardTitle>
+            <CardTitle>Vendor Analysis Results</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse border border-border">
                 <thead>
                   <tr className="bg-muted">
-                    <th className="border border-border p-3 text-left">Item</th>
-                    <th className="border border-border p-3 text-left">Quantity</th>
-                    <th className="border border-border p-3 text-left">Unit Price</th>
-                    <th className="border border-border p-3 text-left">Total</th>
+                    <th className="border border-border p-3 text-left">Vendor</th>
+                    <th className="border border-border p-3 text-left">Quoted Price</th>
+                    <th className="border border-border p-3 text-left">Calculated TCO</th>
+                    <th className="border border-border p-3 text-left">Lead Time</th>
+                    <th className="border border-border p-3 text-left">Risk Score</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {billOfMaterials.map((item, index) => (
-                    <tr key={index} className="hover:bg-muted/50">
-                      <td className="border border-border p-3">{item.item}</td>
-                      <td className="border border-border p-3">{item.quantity}</td>
-                      <td className="border border-border p-3">${item.unit_price.toFixed(2)}</td>
-                      <td className="border border-border p-3 font-medium">
-                        ${(item.quantity * item.unit_price).toFixed(2)}
+                  {vendorResults.map((vendor) => (
+                    <tr key={vendor.id} className="hover:bg-muted/50">
+                      <td className="border border-border p-3 font-medium">{vendor.vendorName}</td>
+                      <td className="border border-border p-3">${vendor.quotedPrice.toLocaleString()}</td>
+                      <td className="border border-border p-3 font-semibold text-azure">
+                        ${vendor.calculatedTCO.toLocaleString()}
+                      </td>
+                      <td className="border border-border p-3">{vendor.leadTime} days</td>
+                      <td className="border border-border p-3">
+                        <Badge 
+                          variant={vendor.riskScore >= 70 ? "destructive" : vendor.riskScore >= 40 ? "secondary" : "outline"}
+                          className={vendor.riskScore < 40 ? "border-success text-success" : ""}
+                        >
+                          {vendor.riskScore}/100
+                        </Badge>
                       </td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot>
-                  <tr className="bg-muted font-medium">
-                    <td className="border border-border p-3" colSpan={3}>Total</td>
-                    <td className="border border-border p-3">
-                      ${billOfMaterials.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0).toFixed(2)}
-                    </td>
-                  </tr>
-                </tfoot>
               </table>
+            </div>
+            
+            {/* Risk Factors */}
+            <div className="mt-4 space-y-2">
+              <h4 className="font-medium">Risk Factors Summary:</h4>
+              {vendorResults.map((vendor) => (
+                vendor.riskFactors.length > 0 && (
+                  <div key={vendor.id} className="p-3 bg-muted rounded-lg">
+                    <p className="font-medium text-sm mb-1">{vendor.vendorName}:</p>
+                    <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                      {vendor.riskFactors.map((factor, index) => (
+                        <li key={index}>{factor}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              ))}
             </div>
           </CardContent>
         </Card>
