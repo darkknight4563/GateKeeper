@@ -114,8 +114,8 @@ export const mockVendorOffers: VendorData[] = [
       certification: 'DNV-GL certified'
     },
     issues: [
-      '⚠️ PRICE MISMATCH: Quoted €5.8M but calculated €5.91M (€110k difference)',
-      '⚠️ Delivery split into 2 sections - coordination risk',
+      'PRICE MISMATCH: Quoted EUR 5.8M but calculated EUR 5.91M (EUR 110k difference)',
+      'Delivery split into 2 sections - coordination risk',
       'Clarification needed: Final payment terms for section 2 delivery',
       'Missing: Detailed warranty terms for multi-section delivery'
     ]

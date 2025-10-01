@@ -204,8 +204,9 @@ const VendorDashboard: React.FC = () => {
         
         doc.setFontSize(14);
         doc.setTextColor(220, 38, 38); // Red color
-        doc.text('⚠ Issues & Clarifications Needed', 14, riskY);
+        doc.text('ISSUES & CLARIFICATIONS NEEDED', 14, riskY);
         doc.setFontSize(9);
+        doc.setTextColor(0, 0, 0);
         
         vendorsWithIssues.forEach((vendor) => {
           riskY += 12;
@@ -223,7 +224,7 @@ const VendorDashboard: React.FC = () => {
           
           riskY += 6;
           doc.setFontSize(9);
-          doc.setTextColor(0, 0, 0);
+          doc.setTextColor(60, 60, 60);
           
           vendor.issues!.forEach((issue) => {
             if (riskY > doc.internal.pageSize.height - 30) {
@@ -231,9 +232,10 @@ const VendorDashboard: React.FC = () => {
               riskY = 20;
             }
             
-            // Wrap text if too long
+            // Wrap text if too long - use simple bullet point
             const maxWidth = doc.internal.pageSize.width - 30;
-            const lines = doc.splitTextToSize(`• ${issue}`, maxWidth);
+            const bulletPoint = String.fromCharCode(8226); // Unicode bullet point •
+            const lines = doc.splitTextToSize(`${bulletPoint} ${issue}`, maxWidth);
             lines.forEach((line: string) => {
               doc.text(line, 18, riskY);
               riskY += 5;
