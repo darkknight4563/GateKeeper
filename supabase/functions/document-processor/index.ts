@@ -1,332 +1,193 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-interface OCRResult {
-  confidence: number;
-  text: string;
-  bbox: [number, number, number, number];
-  line_items?: LineItem[];
-}
-
-interface LineItem {
-  item: string;
-  quantity: number;
-  unit_price: number;
-  description?: string;
-  part_number?: string;
-}
-
-// Simulated OCR text extraction (replace with actual OCR service like Azure Document Intelligence)
-class TextExtractor {
-  async extractTextFromFile(fileBuffer: ArrayBuffer, mimeType: string): Promise<OCRResult> {
-    // Simulate OCR processing delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Mock OCR text extraction based on file type
-    const mockTexts = [
-      `VENDOR QUOTE - TechSupply Corp
-      Date: 2024-01-15
-      Quote #: TS-2024-001
-      
-      BILL OF MATERIALS:
-      Item Description          Part No.    Qty    Unit Price    Total
-      Circuit Board Assembly    CB-1001     25     $45.00       $1,125.00
-      Resistor Pack 10K         R-10K-P     100    $0.15        $15.00
-      Capacitor 100uF           C-100UF     50     $0.85        $42.50
-      LED Indicator Red         LED-R-5MM   200    $0.12        $24.00
-      Connector 4-Pin           CONN-4P     30     $2.50        $75.00
-      
-      Subtotal: $1,281.50
-      Tax: $102.52
-      Total: $1,384.02`,
-      
-      `PROPOSAL - Global Electronics Ltd
-      Proposal ID: GEL-2024-0023
-      Valid Until: 2024-02-15
-      
-      PARTS LIST:
-      Description               SKU         Quantity  Price Each   Extended
-      Microcontroller Unit      MCU-ARM32   10        $28.50      $285.00
-      Memory Module 4GB         MEM-4GB     15        $12.75      $191.25
-      Power Supply 12V 2A       PSU-12V2A   8         $18.90      $151.20
-      Heat Sink Aluminum        HS-AL-40    20        $3.25       $65.00
-      Cable Assembly 1M         CABLE-1M    25        $4.80       $120.00
-      
-      Subtotal: $812.45
-      Shipping: $45.00
-      TOTAL: $857.45`,
-      
-      `QUOTATION - Precision Manufacturing
-      Quote Reference: PM-Q-2024-007
-      Customer: [Customer Name]
-      
-      MATERIAL REQUIREMENTS:
-      Item                      Code        Req'd    Unit Cost    Amount
-      Aluminum Housing          ALU-HOUS    12       $67.50      $810.00
-      Stainless Screws M4       SS-M4-20    144      $0.08       $11.52
-      Gasket Rubber O-Ring      GAS-OR-25   24       $1.45       $34.80
-      Label Serial Number       LBL-SN      12       $0.95       $11.40
-      Coating Anti-Corrosion    COAT-AC     1        $125.00     $125.00
-      
-      Net Total: $992.72
-      Delivery: 10-14 days`
-    ];
-    
-    const selectedText = mockTexts[Math.floor(Math.random() * mockTexts.length)];
-    
-    return {
-      confidence: 0.92 + Math.random() * 0.08,
-      text: selectedText,
-      bbox: [0, 0, 100, 100], // Mock bounding box
-      line_items: await this.extractLineItems(selectedText)
-    };
-  }
-
-  private async extractLineItems(text: string): Promise<LineItem[]> {
-    const lines = text.split('\n');
-    const lineItems: LineItem[] = [];
-    
-    // Patterns to match bill of materials entries
-    const patterns = [
-      // Pattern 1: Item Description | Part No. | Qty | Unit Price | Total
-      /^(.+?)\s+([A-Z0-9-]+)\s+(\d+)\s+\$?([\d,]+\.?\d*)\s+\$?([\d,]+\.?\d*)$/,
-      // Pattern 2: Description | SKU | Quantity | Price Each | Extended
-      /^(.+?)\s+([A-Z0-9-]+)\s+(\d+)\s+\$?([\d,]+\.?\d*)\s+\$?([\d,]+\.?\d*)$/,
-      // Pattern 3: Item | Code | Req'd | Unit Cost | Amount
-      /^(.+?)\s+([A-Z0-9-]+)\s+(\d+)\s+\$?([\d,]+\.?\d*)\s+\$?([\d,]+\.?\d*)$/
-    ];
-    
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-      
-      // Skip headers and empty lines
-      if (!trimmedLine || 
-          trimmedLine.includes('Description') || 
-          trimmedLine.includes('Item') ||
-          trimmedLine.includes('Subtotal') ||
-          trimmedLine.includes('Total') ||
-          trimmedLine.includes('Tax') ||
-          trimmedLine.includes('----')) {
-        continue;
-      }
-      
-      for (const pattern of patterns) {
-        const match = trimmedLine.match(pattern);
-        if (match) {
-          const [, description, partNumber, quantityStr, unitPriceStr] = match;
-          
-          const quantity = parseInt(quantityStr, 10);
-          const unitPrice = parseFloat(unitPriceStr.replace(/,/g, ''));
-          
-          if (!isNaN(quantity) && !isNaN(unitPrice) && quantity > 0 && unitPrice > 0) {
-            lineItems.push({
-              item: description.trim(),
-              quantity,
-              unit_price: unitPrice,
-              description: description.trim(),
-              part_number: partNumber.trim()
-            });
-          }
-          break;
-        }
-      }
-    }
-    
-    return lineItems;
-  }
-}
-
-// Data normalization utilities
-class DataNormalizer {
-  static normalizeText(text: string): string {
-    return text
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, ' ') // Normalize whitespace
-      .replace(/[^\w\s-]/g, '') // Remove special characters except hyphens
-  }
-
-  static normalizePartNumber(partNumber: string): string {
-    return partNumber
-      .trim()
-      .toUpperCase()
-      .replace(/\s+/g, '-') // Replace spaces with hyphens
-      .replace(/[^A-Z0-9-]/g, '') // Keep only alphanumeric and hyphens
-  }
-
-  static normalizePrice(priceStr: string): number {
-    const cleaned = priceStr.replace(/[$,\s]/g, '');
-    const price = parseFloat(cleaned);
-    return isNaN(price) ? 0 : Math.round(price * 100) / 100; // Round to 2 decimal places
-  }
-
-  static applyTextNormalization(items: LineItem[]): LineItem[] {
-    return items.map(item => ({
-      ...item,
-      item: this.normalizeText(item.item),
-      description: item.description ? this.normalizeText(item.description) : undefined,
-      part_number: item.part_number ? this.normalizePartNumber(item.part_number) : undefined,
-      unit_price: this.normalizePrice(item.unit_price.toString())
-    }));
-  }
-
-  // Synonym mapping for common variations
-  static applySynonymMapping(text: string): string {
-    const synonymMap: Record<string, string> = {
-      'resistor pack': 'resistor array',
-      'led indicator': 'light emitting diode',
-      'connector 4-pin': '4-pin connector',
-      'circuit board': 'pcb',
-      'power supply': 'psu',
-      'heat sink': 'heatsink',
-      'aluminum housing': 'al housing',
-      'stainless screws': 'ss screws'
-    };
-
-    let normalized = text.toLowerCase();
-    for (const [variant, standard] of Object.entries(synonymMap)) {
-      normalized = normalized.replace(new RegExp(variant, 'gi'), standard);
-    }
-    
-    return normalized;
-  }
-}
-
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders })
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!
 
-    // Get the authorization header
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       return new Response(
-        JSON.stringify({ error: 'Authorization header required' }),
+        JSON.stringify({ error: 'Authorization required' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Verify the user
     const token = authHeader.replace('Bearer ', '')
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     
     if (authError || !user) {
       return new Response(
-        JSON.stringify({ error: 'Invalid authorization token' }),
+        JSON.stringify({ error: 'Invalid token' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    if (req.method === 'POST') {
-      const formData = await req.formData()
-      const file = formData.get('file') as File
-      const options = JSON.parse(formData.get('options') as string || '{}')
+    const { document_id, file_content } = await req.json()
 
-      if (!file) {
-        return new Response(
-          JSON.stringify({ error: 'No file provided' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      console.log(`Processing file: ${file.name}, size: ${file.size}, type: ${file.type}`)
-
-      // Save file to temporary storage (simulate)
-      const fileBuffer = await file.arrayBuffer()
-      const tempFilePath = `temp/${user.id}/${Date.now()}-${file.name}`
-      
-      console.log(`File saved to temporary path: ${tempFilePath}`)
-
-      // Extract text using OCR simulation
-      const extractor = new TextExtractor()
-      const ocrResult = await extractor.extractTextFromFile(fileBuffer, file.type)
-      
-      console.log(`OCR extraction completed. Confidence: ${ocrResult.confidence}, Line items: ${ocrResult.line_items?.length || 0}`)
-
-      // Apply data normalization
-      let normalizedItems = ocrResult.line_items || []
-      
-      if (options.applyNormalization !== false) {
-        normalizedItems = DataNormalizer.applyTextNormalization(normalizedItems)
-        console.log('Applied text normalization')
-      }
-
-      if (options.applySynonymMapping) {
-        normalizedItems = normalizedItems.map(item => ({
-          ...item,
-          item: DataNormalizer.applySynonymMapping(item.item),
-          description: item.description ? DataNormalizer.applySynonymMapping(item.description) : undefined
-        }))
-        console.log('Applied synonym mapping')
-      }
-
-      // Store processing result in database
-      const { data: document, error: docError } = await supabase
-        .from('documents')
-        .insert({
-          filename: file.name,
-          file_path: tempFilePath,
-          file_size: file.size,
-          mime_type: file.type,
-          upload_status: 'completed',
-          user_id: user.id
-        })
-        .select()
-        .single()
-
-      if (docError) {
-        console.error('Database error:', docError)
-        return new Response(
-          JSON.stringify({ error: 'Failed to save document metadata' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
+    if (!document_id) {
       return new Response(
-        JSON.stringify({
-          document_id: document.id,
-          extracted_text: ocrResult.text,
-          confidence: ocrResult.confidence,
-          line_items: normalizedItems,
-          normalization_applied: {
-            text_normalization: options.applyNormalization !== false,
-            synonym_mapping: options.applySynonymMapping || false
-          },
-          temp_file_path: tempFilePath,
-          message: 'Document processed successfully with OCR and normalization'
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
+        JSON.stringify({ error: 'document_id required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
+    console.log(`Processing document ${document_id}`)
+
+    // Get document metadata
+    const { data: document, error: docError } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('id', document_id)
+      .eq('user_id', user.id)
+      .single()
+
+    if (docError || !document) {
+      return new Response(
+        JSON.stringify({ error: 'Document not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Extract text content based on file type
+    let documentText = ''
+    
+    if (file_content) {
+      documentText = file_content
+    } else {
+      documentText = `Document content for ${document.filename}`
+    }
+
+    // Call Lovable AI to extract structured vendor offer data
+    const extractionPrompt = `You are a procurement data extraction expert. Analyze this vendor offer document and extract the following information in JSON format:
+
+{
+  "vendor_name": "string - the supplier/vendor company name",
+  "quoted_price": number - total quoted price/amount,
+  "currency": "string - currency code (USD, EUR, etc.)",
+  "items": [
+    {
+      "part_number": "string",
+      "description": "string", 
+      "quantity": number,
+      "unit_price": number,
+      "total_price": number
+    }
+  ],
+  "quoted_lead_time": number - delivery lead time in days,
+  "certifications": ["string array - any mentioned certifications like ISO 9001, AS9100"],
+  "delivery_terms": "string - delivery terms if mentioned",
+  "payment_terms": "string - payment terms if mentioned",
+  "location": "string - vendor location/country"
+}
+
+Document content:
+${documentText}
+
+Extract all available information. If a field is not found, use reasonable defaults or null. Return ONLY valid JSON.`
+
+    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${lovableApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { 
+            role: 'system', 
+            content: 'You are a data extraction assistant. Always return valid JSON only, no markdown formatting.' 
+          },
+          { role: 'user', content: extractionPrompt }
+        ],
+        temperature: 0.1,
+      }),
+    })
+
+    if (!aiResponse.ok) {
+      const errorText = await aiResponse.text()
+      console.error('Lovable AI error:', aiResponse.status, errorText)
+      throw new Error(`AI extraction failed: ${aiResponse.status}`)
+    }
+
+    const aiResult = await aiResponse.json()
+    const extractedContent = aiResult.choices[0]?.message?.content
+
+    if (!extractedContent) {
+      throw new Error('No content extracted from AI response')
+    }
+
+    console.log('Raw AI response:', extractedContent)
+
+    // Parse the JSON response (handle potential markdown code blocks)
+    let extractedData
+    try {
+      const jsonMatch = extractedContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
+      const jsonStr = jsonMatch ? jsonMatch[1] : extractedContent
+      extractedData = JSON.parse(jsonStr.trim())
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError, 'Content:', extractedContent)
+      throw new Error('Failed to parse extracted data as JSON')
+    }
+
+    // Validate and normalize the extracted data
+    const vendorData = {
+      vendor_name: extractedData.vendor_name || 'Unknown Vendor',
+      quoted_price: Number(extractedData.quoted_price) || 0,
+      currency: extractedData.currency || 'USD',
+      items_count: Array.isArray(extractedData.items) ? extractedData.items.length : 0,
+      quoted_lead_time: Number(extractedData.quoted_lead_time) || 30,
+      certifications: Array.isArray(extractedData.certifications) ? extractedData.certifications : [],
+      delivery_terms: extractedData.delivery_terms || null,
+      payment_terms: extractedData.payment_terms || null,
+      location: extractedData.location || 'Unknown',
+      items: extractedData.items || [],
+      delivery_history: 'unknown',
+      quoted_total: Number(extractedData.quoted_price) || 0,
+      line_item_total: Array.isArray(extractedData.items) 
+        ? extractedData.items.reduce((sum: number, item: any) => sum + (Number(item.total_price) || 0), 0)
+        : 0
+    }
+
+    console.log('Processed vendor data:', vendorData)
+
     return new Response(
-      JSON.stringify({ error: 'Method not allowed' }),
-      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ 
+        success: true,
+        vendor_data: vendorData,
+        raw_extraction: extractedData
+      }),
+      { 
+        status: 200, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
     )
 
   } catch (error) {
-    console.error('Function error:', error)
+    console.error('Document processor error:', error)
     return new Response(
       JSON.stringify({ 
-        error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Processing failed',
+        details: error instanceof Error ? error.stack : undefined
       }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
     )
   }
 })
