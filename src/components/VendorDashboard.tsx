@@ -134,7 +134,52 @@ const VendorDashboard: React.FC = () => {
       doc.text(`Total Vendors Analyzed: ${stats.totalVendors}`, 14, finalY + 7);
       doc.text(`Average TCO: $${Math.round(stats.avgTCO).toLocaleString()}`, 14, finalY + 14);
       doc.text(`High Risk Vendors: ${stats.highRiskCount}`, 14, finalY + 21);
+      
+      // Risk Analysis Section
+      let riskY = finalY + 35;
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Risk Score Analysis', 14, riskY);
+      doc.setFontSize(9);
+      
+      vendorResults.forEach((vendor, index) => {
+        riskY += 12;
+        
+        // Vendor name with risk score
+        doc.setFontSize(11);
+        doc.setTextColor(0, 0, 0);
+        doc.text(`${vendor.vendorName} (Risk Score: ${vendor.riskScore}/100)`, 14, riskY);
+        
+        riskY += 6;
+        doc.setFontSize(9);
+        doc.setTextColor(60, 60, 60);
+        
+        // Risk factors
+        vendor.riskFactors.forEach((factor) => {
+          if (riskY > doc.internal.pageSize.height - 30) {
+            doc.addPage();
+            riskY = 20;
+          }
+          
+          // Color code based on factor type
+          if (factor.startsWith('+')) {
+            doc.setTextColor(200, 0, 0); // Red for negative factors
+          } else if (factor.startsWith('-')) {
+            doc.setTextColor(0, 150, 0); // Green for positive factors
+          } else if (factor.startsWith('=')) {
+            doc.setFontSize(10);
+            doc.setTextColor(0, 0, 0); // Black for total
+          }
+          
+          doc.text(`  ${factor}`, 18, riskY);
+          riskY += 5;
+          doc.setFontSize(9);
+        });
+        
+        riskY += 5; // Space between vendors
+      });
     }
+
     
     // Footer
     doc.setFontSize(8);
