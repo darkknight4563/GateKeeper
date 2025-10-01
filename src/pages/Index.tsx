@@ -1,10 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Cloud, Database, Zap, FileText, Upload, BarChart3, Brain } from "lucide-react";
-import ArchitectureDiagram from "@/components/ArchitectureDiagram";
-import DataFlowSteps from "@/components/DataFlowSteps";
-import AzureServices from "@/components/AzureServices";
-import TechnicalSpecs from "@/components/TechnicalSpecs";
+import { Upload, BarChart3, Brain } from "lucide-react";
 import DocumentUpload from "@/components/DocumentUpload";
 import VendorDashboard from "@/components/VendorDashboard";
 import AdvancedDocumentDemo from "@/components/AdvancedDocumentDemo";
@@ -15,100 +10,33 @@ const Index = () => {
       {/* Header */}
       <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-gradient-azure">
-                <Cloud className="w-6 h-6 text-primary-foreground" />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-foreground">Azure Document Intelligence</h1>
-                <p className="text-sm text-muted-foreground">Serverless Architecture Design</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge className="bg-azure text-primary-foreground">Serverless</Badge>
-              <Badge variant="outline" className="border-success text-success">Scalable</Badge>
-            </div>
-          </div>
+          <h1 className="text-2xl font-semibold text-foreground">Vendor Document Processor</h1>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="py-12 bg-gradient-to-br from-background to-secondary">
-        <div className="container mx-auto px-6">
-          <div className="text-center mb-8">
-            <h2 className="text-4xl font-bold text-foreground mb-4">
-              Serverless Document Processing Architecture
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-              A comprehensive Azure-based solution for processing PDF documents, extracting structured data, 
-              and generating comparison reports using modern serverless technologies.
-            </p>
-          </div>
-        </div>
-      </section>
-
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
-        <Tabs defaultValue="architecture" className="w-full">
-          <TabsList className="grid w-full grid-cols-7 mb-8">
-            <TabsTrigger value="architecture">Architecture</TabsTrigger>
-            <TabsTrigger value="dataflow">Data Flow</TabsTrigger>
-            <TabsTrigger value="services">Azure Services</TabsTrigger>
-            <TabsTrigger value="specs">Technical Specs</TabsTrigger>
-            <TabsTrigger value="demo">Live Demo</TabsTrigger>
-            <TabsTrigger value="dashboard">Vendor Dashboard</TabsTrigger>
-            <TabsTrigger value="advanced">Advanced Processing</TabsTrigger>
+        <Tabs defaultValue="upload" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 mb-8">
+            <TabsTrigger value="upload">
+              <Upload className="h-4 w-4 mr-2" />
+              Upload & Process
+            </TabsTrigger>
+            <TabsTrigger value="dashboard">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Vendor Comparison
+            </TabsTrigger>
+            <TabsTrigger value="advanced">
+              <Brain className="h-4 w-4 mr-2" />
+              Advanced Analysis
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="architecture" className="space-y-8">
+          <TabsContent value="upload" className="space-y-8">
             <div>
-              <h3 className="text-2xl font-semibold text-foreground mb-4">System Architecture Overview</h3>
+              <h3 className="text-2xl font-semibold text-foreground mb-4">Upload Documents</h3>
               <p className="text-muted-foreground mb-6">
-                Interactive diagram showing the complete serverless architecture with Azure services integration.
-              </p>
-              <ArchitectureDiagram />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="dataflow" className="space-y-8">
-            <div>
-              <h3 className="text-2xl font-semibold text-foreground mb-4">Document Processing Flow</h3>
-              <p className="text-muted-foreground mb-6">
-                Step-by-step breakdown of how documents flow through the system from upload to final report generation.
-              </p>
-              <DataFlowSteps />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="services" className="space-y-8">
-            <div>
-              <h3 className="text-2xl font-semibold text-foreground mb-4">Azure Services Integration</h3>
-              <p className="text-muted-foreground mb-6">
-                Detailed overview of each Azure service and how they work together to create a robust document processing solution.
-              </p>
-              <AzureServices />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="specs" className="space-y-8">
-            <div>
-              <h3 className="text-2xl font-semibold text-foreground mb-4">Technical Specifications</h3>
-              <p className="text-muted-foreground mb-6">
-                Comprehensive technical details including security, performance, and operational considerations.
-              </p>
-              <TechnicalSpecs />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="demo" className="space-y-8">
-            <div>
-              <h3 className="text-2xl font-semibold text-foreground mb-4 flex items-center gap-2">
-                <Upload className="h-6 w-6" />
-                Live Document Processing Demo
-              </h3>
-              <p className="text-muted-foreground mb-6">
-                Upload PDF documents to test the document processing pipeline. Connect to your Python FastAPI backend for real-time processing.
+                Upload vendor documents to extract data, calculate costs, and generate comparison reports.
               </p>
               <DocumentUpload />
             </div>
@@ -116,12 +44,9 @@ const Index = () => {
 
           <TabsContent value="dashboard" className="space-y-8">
             <div>
-              <h3 className="text-2xl font-semibold text-foreground mb-4 flex items-center gap-2">
-                <BarChart3 className="h-6 w-6" />
-                Vendor Comparison Dashboard
-              </h3>
+              <h3 className="text-2xl font-semibold text-foreground mb-4">Vendor Analysis</h3>
               <p className="text-muted-foreground mb-6">
-                Complete vendor analysis dashboard with multi-file upload, TCO calculation, risk scoring, and comparative reporting.
+                Compare multiple vendors with TCO calculations, risk scoring, and detailed analysis.
               </p>
               <VendorDashboard />
             </div>
@@ -129,27 +54,15 @@ const Index = () => {
 
           <TabsContent value="advanced" className="space-y-8">
             <div>
-              <h3 className="text-2xl font-semibold text-foreground mb-4 flex items-center gap-2">
-                <Brain className="h-6 w-6" />
-                Advanced Document Processing
-              </h3>
+              <h3 className="text-2xl font-semibold text-foreground mb-4">Advanced Processing</h3>
               <p className="text-muted-foreground mb-6">
-                Python-equivalent OCR simulation, Bill of Materials extraction, and comprehensive data normalization techniques.
+                OCR processing, Bill of Materials extraction, and data normalization.
               </p>
               <AdvancedDocumentDemo />
             </div>
           </TabsContent>
         </Tabs>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-border/50 py-8 bg-card/30">
-        <div className="container mx-auto px-6 text-center">
-          <p className="text-muted-foreground">
-            Built with Azure serverless technologies for scalable document processing
-          </p>
-        </div>
-      </footer>
     </div>
   );
 };
