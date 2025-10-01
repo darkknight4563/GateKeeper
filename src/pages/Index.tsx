@@ -10,7 +10,7 @@ const Index = () => {
       {/* Header */}
       <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-6 py-4">
-          <h1 className="text-2xl font-semibold text-foreground">Vendor Document Processor</h1>
+          <h1 className="text-2xl font-semibold text-foreground">ClarityChain AI</h1>
         </div>
       </header>
 
