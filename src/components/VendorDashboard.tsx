@@ -2,127 +2,88 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, BarChart3, Users, TrendingUp } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FileText, BarChart3, Trophy, AlertTriangle, TrendingDown } from "lucide-react";
+import { toast } from "sonner";
 import MultiFileUpload from './MultiFileUpload';
 import VendorComparisonTable, { VendorData } from './VendorComparisonTable';
-
-// Mock data for demonstration
-const sampleVendors: VendorData[] = [
-  {
-    id: '1',
-    vendorName: 'TechSupply Corp',
-    quotedPrice: 12500,
-    calculatedTCO: 14800,
-    leadTime: 14,
-    riskScore: 25,
-    items: 45,
-    currency: 'USD',
-    riskFactors: ['Minor delivery delays in Q3', 'Single source supplier for 2 components'],
-    tcoBreakdown: {
-      quotedPrice: 12500,
-      shippingCosts: 800,
-      handlingFees: 300,
-      riskPremium: 500,
-      qualityAdjustment: 700
-    }
-  },
-  {
-    id: '2',
-    vendorName: 'Global Electronics Ltd',
-    quotedPrice: 11800,
-    calculatedTCO: 16200,
-    leadTime: 21,
-    riskScore: 75,
-    items: 42,
-    currency: 'USD',
-    riskFactors: [
-      'History of late deliveries (30% of orders)',
-      'Missing ISO 9001 certification',
-      'Significant price discrepancy detected',
-      'Located in high-risk geographic region'
-    ],
-    tcoBreakdown: {
-      quotedPrice: 11800,
-      shippingCosts: 1200,
-      handlingFees: 400,
-      riskPremium: 2300,
-      qualityAdjustment: 500
-    }
-  },
-  {
-    id: '3',
-    vendorName: 'Precision Manufacturing',
-    quotedPrice: 13200,
-    calculatedTCO: 15100,
-    leadTime: 10,
-    riskScore: 15,
-    items: 48,
-    currency: 'USD',
-    riskFactors: ['Premium pricing for express delivery'],
-    tcoBreakdown: {
-      quotedPrice: 13200,
-      shippingCosts: 600,
-      handlingFees: 200,
-      riskPremium: 200,
-      qualityAdjustment: 900
-    }
-  },
-  {
-    id: '4',
-    vendorName: 'Budget Components Inc',
-    quotedPrice: 9500,
-    calculatedTCO: 18500,
-    leadTime: 35,
-    riskScore: 85,
-    items: 38,
-    currency: 'USD',
-    riskFactors: [
-      'No quality certifications',
-      'History of defective products (12% return rate)',
-      'Extended lead times due to capacity issues',
-      'Limited customer support availability'
-    ],
-    tcoBreakdown: {
-      quotedPrice: 9500,
-      shippingCosts: 2000,
-      handlingFees: 800,
-      riskPremium: 4500,
-      qualityAdjustment: 1700
-    }
-  }
-];
+import { documentApi } from '@/services/documentApi';
 
 const VendorDashboard: React.FC = () => {
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
   const [selectedVendor, setSelectedVendor] = useState<VendorData | null>(null);
-  const [showResults, setShowResults] = useState(false);
+  const [vendorResults, setVendorResults] = useState<VendorData[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleFilesUploaded = (files: any[]) => {
     setUploadedFiles(files);
-    // Simulate processing completion
-    setTimeout(() => {
-      setShowResults(true);
-    }, 2000);
   };
 
-  const handleProcessDocuments = () => {
-    setShowResults(true);
+  const handleProcessDocuments = async () => {
+    if (uploadedFiles.length === 0) {
+      toast.error('No files to process');
+      return;
+    }
+
+    setIsProcessing(true);
+    const processedVendors: VendorData[] = [];
+
+    try {
+      // Process each uploaded document
+      for (const file of uploadedFiles) {
+        toast.info(`Processing ${file.name}...`);
+        
+        // Upload document
+        const uploadResponse = await documentApi.uploadDocument(file);
+        
+        // Process document
+        const processResponse = await documentApi.processDocument(uploadResponse.id);
+        
+        // Poll for results
+        const results = await documentApi.pollJobStatus(processResponse.job_id, (progress) => {
+          console.log(`Processing progress: ${progress}%`);
+        });
+
+        // Map results to VendorData format
+        if (results.results && results.results.length > 0) {
+          processedVendors.push(...results.results);
+        }
+      }
+
+      setVendorResults(processedVendors);
+      toast.success(`Successfully processed ${processedVendors.length} vendor offers`);
+      
+    } catch (error) {
+      console.error('Processing error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to process documents');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const getDashboardStats = () => {
-    const recommendedVendor = sampleVendors.reduce((prev, current) => 
+    if (vendorResults.length === 0) {
+      return null;
+    }
+
+    const recommendedVendor = vendorResults.reduce((prev, current) => 
       current.calculatedTCO < prev.calculatedTCO ? current : prev
     );
     
-    const avgTCO = sampleVendors.reduce((sum, vendor) => sum + vendor.calculatedTCO, 0) / sampleVendors.length;
-    const highRiskVendors = sampleVendors.filter(v => v.riskScore >= 70).length;
+    const avgTCO = vendorResults.reduce((sum, vendor) => sum + vendor.calculatedTCO, 0) / vendorResults.length;
+    const highRiskVendors = vendorResults.filter(v => v.riskScore >= 70).length;
+    const worstVendor = vendorResults.reduce((prev, current) => 
+      current.calculatedTCO > prev.calculatedTCO ? current : prev
+    );
     
     return {
-      totalVendors: sampleVendors.length,
+      totalVendors: vendorResults.length,
       recommendedVendor: recommendedVendor.vendorName,
+      recommendedTCO: recommendedVendor.calculatedTCO,
+      recommendedLeadTime: recommendedVendor.leadTime,
       avgTCO: avgTCO,
       highRiskCount: highRiskVendors,
-      totalSavings: Math.max(...sampleVendors.map(v => v.calculatedTCO)) - recommendedVendor.calculatedTCO
+      totalSavings: worstVendor.calculatedTCO - recommendedVendor.calculatedTCO
     };
   };
 
@@ -147,68 +108,69 @@ const VendorDashboard: React.FC = () => {
                 maxFileSize={50 * 1024 * 1024} // 50MB
               />
               
-              {uploadedFiles.length > 0 && !showResults && (
+              {uploadedFiles.length > 0 && (
                 <Button 
                   onClick={handleProcessDocuments}
                   className="w-full"
                   size="lg"
+                  disabled={isProcessing}
                 >
                   <BarChart3 className="h-4 w-4 mr-2" />
-                  Process & Compare Vendors
+                  {isProcessing ? 'Processing...' : 'Process & Compare Vendors'}
                 </Button>
               )}
             </CardContent>
           </Card>
 
+          {/* Recommendation Card */}
+          {stats && (
+            <Alert className="bg-success/10 border-success">
+              <Trophy className="h-5 w-5 text-success" />
+              <AlertDescription>
+                <div className="font-bold text-success mb-2">Winner: {stats.recommendedVendor}</div>
+                <div className="text-sm space-y-1">
+                  <div>TCO: <span className="font-semibold">${stats.recommendedTCO.toLocaleString()}</span></div>
+                  <div>Lead Time: <span className="font-semibold">{stats.recommendedLeadTime} days</span></div>
+                  <div className="text-xs text-muted-foreground mt-2">
+                    Saves ${stats.totalSavings.toLocaleString()} vs worst option
+                  </div>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Stats Overview */}
-          {showResults && (
+          {stats && (
             <div className="grid grid-cols-1 gap-4">
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-muted-foreground">Total Vendors</p>
-                      <p className="text-2xl font-bold text-foreground">{stats.totalVendors}</p>
+                      <p className="text-sm text-muted-foreground">Avg TCO</p>
+                      <p className="text-2xl font-bold text-foreground">
+                        ${Math.round(stats.avgTCO).toLocaleString()}
+                      </p>
                     </div>
-                    <Users className="h-8 w-8 text-azure" />
+                    <BarChart3 className="h-8 w-8 text-azure" />
                   </div>
                 </CardContent>
               </Card>
               
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Recommended</p>
-                      <p className="text-lg font-semibold text-success">{stats.recommendedVendor}</p>
-                    </div>
-                    <TrendingUp className="h-8 w-8 text-success" />
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardContent className="pt-6">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Potential Savings</p>
-                    <p className="text-xl font-bold text-success">
-                      ${stats.totalSavings.toLocaleString()}
-                    </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Badge variant="outline" className="border-warning text-warning">
-                        {stats.highRiskCount} High Risk
-                      </Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              {stats.highRiskCount > 0 && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    <span className="font-semibold">{stats.highRiskCount}</span> high-risk vendor(s) detected
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
           )}
         </div>
 
         {/* Right Panel - Results Display */}
         <div className="lg:col-span-2">
-          {!showResults ? (
+          {vendorResults.length === 0 ? (
             <Card className="h-full flex items-center justify-center">
               <CardContent className="text-center">
                 <FileText className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
@@ -224,7 +186,7 @@ const VendorDashboard: React.FC = () => {
           ) : (
             <div className="space-y-6">
               <VendorComparisonTable 
-                vendors={sampleVendors}
+                vendors={vendorResults}
                 onVendorSelect={setSelectedVendor}
               />
               

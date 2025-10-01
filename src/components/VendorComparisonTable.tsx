@@ -247,8 +247,9 @@ const VendorComparisonTable: React.FC<VendorComparisonTableProps> = ({
                     key={vendor.id}
                     className={cn(
                       "cursor-pointer transition-colors",
-                      isRecommended && "bg-success/5 border-success",
-                      isHighRisk && "bg-destructive/5"
+                      isRecommended && "bg-success/10 hover:bg-success/15 border-l-4 border-l-success",
+                      isHighRisk && !isRecommended && "bg-destructive/10 hover:bg-destructive/15 border-l-4 border-l-destructive",
+                      !isRecommended && !isHighRisk && "hover:bg-muted/50"
                     )}
                     onClick={() => onVendorSelect?.(vendor)}
                   >
@@ -256,8 +257,13 @@ const VendorComparisonTable: React.FC<VendorComparisonTableProps> = ({
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{vendor.vendorName}</span>
                         {isRecommended && (
-                          <Badge variant="outline" className="border-success text-success">
-                            Recommended
+                          <Badge className="bg-success text-white">
+                            BEST
+                          </Badge>
+                        )}
+                        {isHighRisk && (
+                          <Badge variant="destructive">
+                            HIGH RISK
                           </Badge>
                         )}
                       </div>
@@ -265,17 +271,24 @@ const VendorComparisonTable: React.FC<VendorComparisonTableProps> = ({
                     <TableCell>{formatCurrency(vendor.quotedPrice, vendor.currency)}</TableCell>
                     <TableCell>
                       <span className={cn(
-                        "font-medium",
+                        "font-semibold",
                         isRecommended && "text-success"
                       )}>
                         {formatCurrency(vendor.calculatedTCO, vendor.currency)}
                       </span>
                     </TableCell>
-                    <TableCell>{vendor.leadTime} days</TableCell>
+                    <TableCell className={cn(
+                      vendor.leadTime <= 14 && "text-success font-semibold",
+                      vendor.leadTime > 28 && "text-warning"
+                    )}>
+                      {vendor.leadTime} days
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <span className={cn(
-                          isHighRisk ? "text-destructive" : "text-foreground"
+                          "font-semibold",
+                          isHighRisk && "text-destructive",
+                          !isHighRisk && vendor.riskScore < 40 && "text-success"
                         )}>
                           {vendor.riskScore}
                         </span>
