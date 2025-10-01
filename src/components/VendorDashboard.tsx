@@ -3,8 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { FileText, BarChart3, Trophy, AlertTriangle, TrendingDown } from "lucide-react";
+import { FileText, BarChart3, Trophy, AlertTriangle, TrendingDown, Download } from "lucide-react";
 import { toast } from "sonner";
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import MultiFileUpload from './MultiFileUpload';
 import VendorComparisonTable, { VendorData } from './VendorComparisonTable';
 import { documentApi } from '@/services/documentApi';
@@ -70,6 +72,79 @@ const VendorDashboard: React.FC = () => {
   };
 
   const stats = getDashboardStats();
+
+  const handleGeneratePDF = () => {
+    const doc = new jsPDF();
+    
+    // Title
+    doc.setFontSize(20);
+    doc.text('Vendor Comparison Report', 14, 20);
+    
+    // Winner Recommendation
+    if (stats) {
+      doc.setFontSize(12);
+      doc.setTextColor(0, 128, 0);
+      doc.text(`Winner: ${stats.recommendedVendor}`, 14, 35);
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(10);
+      doc.text(`TCO: $${stats.recommendedTCO.toLocaleString()} | Lead Time: ${stats.recommendedLeadTime} days`, 14, 42);
+      doc.text(`Saves $${stats.totalSavings.toLocaleString()} vs worst option`, 14, 48);
+    }
+    
+    // Table data
+    const tableData = vendorResults.map(vendor => [
+      vendor.vendorName,
+      `$${vendor.quotedPrice.toLocaleString()}`,
+      `$${vendor.calculatedTCO.toLocaleString()}`,
+      `${vendor.leadTime} days`,
+      `${vendor.riskScore}/100`,
+      vendor.riskScore >= 70 ? 'High' : vendor.riskScore >= 40 ? 'Medium' : 'Low'
+    ]);
+    
+    // Generate table
+    autoTable(doc, {
+      startY: 55,
+      head: [['Vendor', 'Quoted Price', 'Total TCO', 'Lead Time', 'Risk Score', 'Risk Level']],
+      body: tableData,
+      headStyles: { fillColor: [41, 128, 185] },
+      alternateRowStyles: { fillColor: [240, 240, 240] },
+      didParseCell: (data) => {
+        // Highlight winner row
+        if (data.section === 'body' && stats) {
+          const vendor = vendorResults[data.row.index];
+          if (vendor.vendorName === stats.recommendedVendor) {
+            data.cell.styles.fillColor = [200, 255, 200];
+            data.cell.styles.fontStyle = 'bold';
+          }
+          // Highlight high risk
+          if (data.column.index === 5 && vendor.riskScore >= 70) {
+            data.cell.styles.textColor = [255, 0, 0];
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      }
+    });
+    
+    // Summary stats
+    if (stats) {
+      const finalY = (doc as any).lastAutoTable.finalY + 10;
+      doc.setFontSize(11);
+      doc.text('Summary Statistics:', 14, finalY);
+      doc.setFontSize(10);
+      doc.text(`Total Vendors Analyzed: ${stats.totalVendors}`, 14, finalY + 7);
+      doc.text(`Average TCO: $${Math.round(stats.avgTCO).toLocaleString()}`, 14, finalY + 14);
+      doc.text(`High Risk Vendors: ${stats.highRiskCount}`, 14, finalY + 21);
+    }
+    
+    // Footer
+    doc.setFontSize(8);
+    doc.setTextColor(128, 128, 128);
+    doc.text(`Generated on ${new Date().toLocaleString()}`, 14, doc.internal.pageSize.height - 10);
+    
+    // Save
+    doc.save(`Vendor_Comparison_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+    toast.success('PDF report generated successfully');
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -165,10 +240,27 @@ const VendorDashboard: React.FC = () => {
             </Card>
           ) : (
             <div className="space-y-6">
-              <VendorComparisonTable 
-                vendors={vendorResults}
-                onVendorSelect={setSelectedVendor}
-              />
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Vendor Comparison</CardTitle>
+                    <Button 
+                      onClick={handleGeneratePDF}
+                      variant="default"
+                      className="gap-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      Generate PDF Report
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <VendorComparisonTable 
+                    vendors={vendorResults}
+                    onVendorSelect={setSelectedVendor}
+                  />
+                </CardContent>
+              </Card>
               
               {selectedVendor && (
                 <Card>
