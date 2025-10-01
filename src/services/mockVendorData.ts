@@ -35,7 +35,10 @@ export const mockVendorOffers: VendorData[] = [
       length: '5000m continuous',
       specification: 'API 17J compliant',
       certification: 'DNV-GL certified'
-    }
+    },
+    issues: [
+      'Minor payment term clarification needed for milestone 3'
+    ]
   },
   {
     id: 'technip-001',
@@ -72,7 +75,8 @@ export const mockVendorOffers: VendorData[] = [
       length: '5000m continuous',
       specification: 'API 17J + ISO 13628-5',
       certification: 'DNV-GL + Lloyd\'s Register'
-    }
+    },
+    issues: []
   },
   {
     id: 'onesubsea-001',
@@ -108,7 +112,13 @@ export const mockVendorOffers: VendorData[] = [
       length: '5000m in 2 sections',
       specification: 'API 17J compliant',
       certification: 'DNV-GL certified'
-    }
+    },
+    issues: [
+      '⚠️ PRICE MISMATCH: Quoted €5.8M but calculated €5.91M (€110k difference)',
+      '⚠️ Delivery split into 2 sections - coordination risk',
+      'Clarification needed: Final payment terms for section 2 delivery',
+      'Missing: Detailed warranty terms for multi-section delivery'
+    ]
   }
 ];
 

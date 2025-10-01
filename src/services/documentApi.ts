@@ -35,6 +35,7 @@ export interface VendorData {
     specification?: string;
     certification?: string;
   };
+  issues?: string[];
 }
 
 export interface ProcessingResults {

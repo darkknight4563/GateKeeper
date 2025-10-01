@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { ArrowUpDown, Search, Eye, AlertTriangle, TrendingDown, Wrench } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ArrowUpDown, Search, Eye, AlertTriangle, TrendingDown, Wrench, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface VendorData {
@@ -36,6 +37,7 @@ export interface VendorData {
     specification?: string;
     certification?: string;
   };
+  issues?: string[];
 }
 
 interface VendorComparisonTableProps {
@@ -113,10 +115,33 @@ const VendorComparisonTable: React.FC<VendorComparisonTableProps> = ({
         <DialogTitle className="flex items-center gap-2">
           <Eye className="h-5 w-5" />
           {vendor.vendorName} - Detailed Analysis
+          {vendor.issues && vendor.issues.length > 0 && (
+            <Badge variant="destructive" className="ml-2">
+              {vendor.issues.length} Issue{vendor.issues.length > 1 ? 's' : ''}
+            </Badge>
+          )}
         </DialogTitle>
       </DialogHeader>
       
       <div className="space-y-6">
+        {/* Issues & Clarifications */}
+        {vendor.issues && vendor.issues.length > 0 && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-5 w-5" />
+            <AlertDescription>
+              <div className="font-bold mb-2">Issues & Clarifications Needed:</div>
+              <ul className="space-y-1 text-sm">
+                {vendor.issues.map((issue, index) => (
+                  <li key={index} className="flex items-start gap-2">
+                    <span className="mt-1">•</span>
+                    <span>{issue}</span>
+                  </li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+        
         {/* TCO Breakdown */}
         <div>
           <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -342,6 +367,12 @@ const VendorComparisonTable: React.FC<VendorComparisonTableProps> = ({
                         {isHighRisk && (
                           <Badge variant="destructive">
                             HIGH RISK
+                          </Badge>
+                        )}
+                        {vendor.issues && vendor.issues.length > 0 && (
+                          <Badge variant="destructive" className="gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            {vendor.issues.length} ALERT{vendor.issues.length > 1 ? 'S' : ''}
                           </Badge>
                         )}
                       </div>

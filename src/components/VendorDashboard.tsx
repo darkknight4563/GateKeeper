@@ -179,6 +179,59 @@ const VendorDashboard: React.FC = () => {
         riskY += 5; // Space between vendors
       });
       
+      // Issues & Clarifications Section
+      const vendorsWithIssues = vendorResults.filter(v => v.issues && v.issues.length > 0);
+      if (vendorsWithIssues.length > 0) {
+        riskY += 15;
+        
+        // Check if we need a new page
+        if (riskY > doc.internal.pageSize.height - 100) {
+          doc.addPage();
+          riskY = 20;
+        }
+        
+        doc.setFontSize(14);
+        doc.setTextColor(220, 38, 38); // Red color
+        doc.text('⚠ Issues & Clarifications Needed', 14, riskY);
+        doc.setFontSize(9);
+        
+        vendorsWithIssues.forEach((vendor) => {
+          riskY += 12;
+          
+          // Check if we need a new page
+          if (riskY > doc.internal.pageSize.height - 60) {
+            doc.addPage();
+            riskY = 20;
+          }
+          
+          // Vendor name in red
+          doc.setFontSize(11);
+          doc.setTextColor(220, 38, 38);
+          doc.text(`${vendor.vendorName} (${vendor.issues!.length} issue${vendor.issues!.length > 1 ? 's' : ''})`, 14, riskY);
+          
+          riskY += 6;
+          doc.setFontSize(9);
+          doc.setTextColor(0, 0, 0);
+          
+          vendor.issues!.forEach((issue) => {
+            if (riskY > doc.internal.pageSize.height - 30) {
+              doc.addPage();
+              riskY = 20;
+            }
+            
+            // Wrap text if too long
+            const maxWidth = doc.internal.pageSize.width - 30;
+            const lines = doc.splitTextToSize(`• ${issue}`, maxWidth);
+            lines.forEach((line: string) => {
+              doc.text(line, 18, riskY);
+              riskY += 5;
+            });
+          });
+          
+          riskY += 3;
+        });
+      }
+      
       // Technical Specifications Section
       if (vendorResults.some(v => v.technicalSpecs)) {
         riskY += 10;
