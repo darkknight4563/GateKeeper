@@ -12,9 +12,12 @@ export const mockVendorOffers: VendorData[] = [
     items: 2,
     currency: 'EUR',
     riskFactors: [
-      'Standard lead time (46 weeks)',
-      'Proven track record',
-      'Competitive pricing'
+      '+15 points: Moderate schedule risk (46 weeks lead time)',
+      '+10 points: Price variance €270k above base cost',
+      '+5 points: Standard payment terms (no flexibility)',
+      '+10 points: Multi-component delivery complexity',
+      '-5 points: Proven supplier track record in region',
+      '= 35 Total Risk Score'
     ],
     tcoBreakdown: {
       quotedPrice: 5400000,
@@ -34,9 +37,14 @@ export const mockVendorOffers: VendorData[] = [
     items: 2,
     currency: 'EUR',
     riskFactors: [
-      'Fastest lead time (42 weeks)',
-      'Excellent certification compliance',
-      'Minor price variance (quoted vs calculated)'
+      '+5 points: Low schedule risk (42 weeks - fastest delivery)',
+      '+8 points: Price variance €250k above base cost',
+      '+5 points: Standard payment terms',
+      '+12 points: Integrated delivery coordination required',
+      '-5 points: Excellent ISO/API certification compliance',
+      '-10 points: Premium quality track record',
+      '+10 points: Single-source dependency',
+      '= 25 Total Risk Score (LOWEST)'
     ],
     tcoBreakdown: {
       quotedPrice: 5100000,
@@ -56,10 +64,13 @@ export const mockVendorOffers: VendorData[] = [
     items: 2,
     currency: 'EUR',
     riskFactors: [
-      'Longest lead time (54 weeks)',
-      'Highest quoted price',
-      'Significant price variance (€5.8M quoted vs €5.91M calculated)',
-      'Complex milestone structure'
+      '+25 points: High schedule risk (54 weeks - longest lead time)',
+      '+15 points: Significant price variance (€350k above quoted)',
+      '+10 points: Premium pricing (highest quoted price)',
+      '+5 points: Complex multi-phase milestone structure',
+      '+8 points: Extended payment terms increase exposure',
+      '-8 points: Specialized subsea technology expertise',
+      '= 55 Total Risk Score (MEDIUM RISK)'
     ],
     tcoBreakdown: {
       quotedPrice: 5800000,
