@@ -178,6 +178,66 @@ const VendorDashboard: React.FC = () => {
         
         riskY += 5; // Space between vendors
       });
+      
+      // Technical Specifications Section
+      if (vendorResults.some(v => v.technicalSpecs)) {
+        riskY += 10;
+        
+        // Check if we need a new page
+        if (riskY > doc.internal.pageSize.height - 100) {
+          doc.addPage();
+          riskY = 20;
+        }
+        
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+        doc.text('Technical Specifications (BOM)', 14, riskY);
+        doc.setFontSize(9);
+        
+        vendorResults.forEach((vendor) => {
+          if (!vendor.technicalSpecs) return;
+          
+          riskY += 12;
+          
+          // Check if we need a new page
+          if (riskY > doc.internal.pageSize.height - 60) {
+            doc.addPage();
+            riskY = 20;
+          }
+          
+          // Vendor name
+          doc.setFontSize(11);
+          doc.setTextColor(0, 0, 0);
+          doc.text(vendor.vendorName, 14, riskY);
+          
+          riskY += 6;
+          doc.setFontSize(9);
+          doc.setTextColor(60, 60, 60);
+          
+          const specs = vendor.technicalSpecs;
+          const specLines = [
+            specs.tubes && `Tubes: ${specs.tubes}`,
+            specs.fibers && `Fibers: ${specs.fibers}`,
+            specs.outerDiameter && `OD: ${specs.outerDiameter}`,
+            specs.weight && `Weight: ${specs.weight}`,
+            specs.bendRadius && `Bend Radius: ${specs.bendRadius}`,
+            specs.length && `Length: ${specs.length}`,
+            specs.specification && `Spec: ${specs.specification}`,
+            specs.certification && `Cert: ${specs.certification}`
+          ].filter(Boolean) as string[];
+          
+          specLines.forEach((line) => {
+            if (riskY > doc.internal.pageSize.height - 30) {
+              doc.addPage();
+              riskY = 20;
+            }
+            doc.text(`  ${line}`, 18, riskY);
+            riskY += 5;
+          });
+          
+          riskY += 3;
+        });
+      }
     }
 
     

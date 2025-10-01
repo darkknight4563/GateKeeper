@@ -25,6 +25,16 @@ export interface VendorData {
     riskPremium: number;
     qualityAdjustment: number;
   };
+  technicalSpecs?: {
+    tubes?: number;
+    fibers?: number;
+    outerDiameter?: string;
+    weight?: string;
+    bendRadius?: string;
+    length?: string;
+    specification?: string;
+    certification?: string;
+  };
 }
 
 export interface ProcessingResults {

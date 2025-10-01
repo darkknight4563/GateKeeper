@@ -25,6 +25,16 @@ export const mockVendorOffers: VendorData[] = [
       handlingFees: 80000,
       riskPremium: 70000,
       qualityAdjustment: 0
+    },
+    technicalSpecs: {
+      tubes: 18,
+      fibers: 4,
+      outerDiameter: '89mm',
+      weight: '42 kg/km',
+      bendRadius: '1.5m',
+      length: '5000m continuous',
+      specification: 'API 17J compliant',
+      certification: 'DNV-GL certified'
     }
   },
   {
@@ -52,6 +62,16 @@ export const mockVendorOffers: VendorData[] = [
       handlingFees: 70000,
       riskPremium: 50000,
       qualityAdjustment: 20000
+    },
+    technicalSpecs: {
+      tubes: 18,
+      fibers: 4,
+      outerDiameter: '85mm',
+      weight: '38 kg/km',
+      bendRadius: '1.3m',
+      length: '5000m continuous',
+      specification: 'API 17J + ISO 13628-5',
+      certification: 'DNV-GL + Lloyd\'s Register'
     }
   },
   {
@@ -78,6 +98,16 @@ export const mockVendorOffers: VendorData[] = [
       handlingFees: 100000,
       riskPremium: 120000,
       qualityAdjustment: 0
+    },
+    technicalSpecs: {
+      tubes: 24,
+      fibers: 6,
+      outerDiameter: '95mm',
+      weight: '48 kg/km',
+      bendRadius: '1.8m',
+      length: '5000m in 2 sections',
+      specification: 'API 17J compliant',
+      certification: 'DNV-GL certified'
     }
   }
 ];

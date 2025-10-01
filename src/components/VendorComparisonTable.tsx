@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ArrowUpDown, Search, Eye, AlertTriangle, TrendingDown } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { ArrowUpDown, Search, Eye, AlertTriangle, TrendingDown, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface VendorData {
@@ -24,6 +25,16 @@ export interface VendorData {
     handlingFees: number;
     riskPremium: number;
     qualityAdjustment: number;
+  };
+  technicalSpecs?: {
+    tubes?: number;
+    fibers?: number;
+    outerDiameter?: string;
+    weight?: string;
+    bendRadius?: string;
+    length?: string;
+    specification?: string;
+    certification?: string;
   };
 }
 
@@ -159,6 +170,73 @@ const VendorComparisonTable: React.FC<VendorComparisonTableProps> = ({
             ))}
           </div>
         </div>
+
+        {/* Technical Specifications */}
+        {vendor.technicalSpecs && (
+          <>
+            <Separator />
+            <div>
+              <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Wrench className="h-5 w-5 text-primary" />
+                Technical Specifications (BOM Highlights)
+              </h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  {vendor.technicalSpecs.tubes && (
+                    <div className="flex justify-between p-3 bg-muted rounded-lg">
+                      <span className="text-muted-foreground">Tubes:</span>
+                      <span className="font-medium">{vendor.technicalSpecs.tubes}</span>
+                    </div>
+                  )}
+                  {vendor.technicalSpecs.fibers && (
+                    <div className="flex justify-between p-3 bg-muted rounded-lg">
+                      <span className="text-muted-foreground">Fibers:</span>
+                      <span className="font-medium">{vendor.technicalSpecs.fibers}</span>
+                    </div>
+                  )}
+                  {vendor.technicalSpecs.outerDiameter && (
+                    <div className="flex justify-between p-3 bg-muted rounded-lg">
+                      <span className="text-muted-foreground">Outer Diameter:</span>
+                      <span className="font-medium">{vendor.technicalSpecs.outerDiameter}</span>
+                    </div>
+                  )}
+                  {vendor.technicalSpecs.weight && (
+                    <div className="flex justify-between p-3 bg-muted rounded-lg">
+                      <span className="text-muted-foreground">Weight:</span>
+                      <span className="font-medium">{vendor.technicalSpecs.weight}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-3">
+                  {vendor.technicalSpecs.bendRadius && (
+                    <div className="flex justify-between p-3 bg-muted rounded-lg">
+                      <span className="text-muted-foreground">Bend Radius:</span>
+                      <span className="font-medium">{vendor.technicalSpecs.bendRadius}</span>
+                    </div>
+                  )}
+                  {vendor.technicalSpecs.length && (
+                    <div className="flex justify-between p-3 bg-muted rounded-lg">
+                      <span className="text-muted-foreground">Length:</span>
+                      <span className="font-medium">{vendor.technicalSpecs.length}</span>
+                    </div>
+                  )}
+                  {vendor.technicalSpecs.specification && (
+                    <div className="flex justify-between p-3 bg-muted rounded-lg">
+                      <span className="text-muted-foreground">Specification:</span>
+                      <span className="font-medium text-xs">{vendor.technicalSpecs.specification}</span>
+                    </div>
+                  )}
+                  {vendor.technicalSpecs.certification && (
+                    <div className="flex justify-between p-3 bg-muted rounded-lg">
+                      <span className="text-muted-foreground">Certification:</span>
+                      <span className="font-medium text-xs">{vendor.technicalSpecs.certification}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </DialogContent>
   );
