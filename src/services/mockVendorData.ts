@@ -27,13 +27,13 @@ export const mockVendorOffers: VendorData[] = [
       qualityAdjustment: 0
     },
     technicalSpecs: {
-      tubes: 18,
-      fibers: 4,
-      outerDiameter: '89mm',
-      weight: '42 kg/km',
-      bendRadius: '1.5m',
-      length: '5000m continuous',
-      specification: 'API 17J compliant',
+      tubes: 6,
+      fibers: 24,
+      outerDiameter: '1/2" super duplex',
+      weight: 'Not specified',
+      bendRadius: 'Standard',
+      length: '2400m continuous',
+      specification: 'DNV-ST-F119, NORSOK Z-001',
       certification: 'DNV-GL certified'
     },
     issues: [
@@ -67,14 +67,14 @@ export const mockVendorOffers: VendorData[] = [
       qualityAdjustment: 20000
     },
     technicalSpecs: {
-      tubes: 18,
-      fibers: 4,
-      outerDiameter: '85mm',
-      weight: '38 kg/km',
-      bendRadius: '1.3m',
-      length: '5000m continuous',
-      specification: 'API 17J + ISO 13628-5',
-      certification: 'DNV-GL + Lloyd\'s Register'
+      tubes: 5,
+      fibers: 24,
+      outerDiameter: '1/2" super duplex',
+      weight: 'Not specified',
+      bendRadius: 'Standard',
+      length: '2400m continuous',
+      specification: 'DNV-ST-F119, API 17E',
+      certification: 'DNV-GL + API 17E certified'
     },
     issues: []
   },
@@ -104,14 +104,14 @@ export const mockVendorOffers: VendorData[] = [
       qualityAdjustment: 0
     },
     technicalSpecs: {
-      tubes: 24,
-      fibers: 6,
-      outerDiameter: '95mm',
-      weight: '48 kg/km',
-      bendRadius: '1.8m',
-      length: '5000m in 2 sections',
-      specification: 'API 17J compliant',
-      certification: 'DNV-GL certified'
+      tubes: 8,
+      fibers: 24,
+      outerDiameter: '1/2" tubes',
+      weight: 'Not specified',
+      bendRadius: 'Standard',
+      length: '2400m continuous',
+      specification: 'DNV-ST-F119, API 17E',
+      certification: 'DNV-GL + API 17E certified'
     },
     issues: [
       'PRICE MISMATCH: Quoted EUR 5.8M but calculated EUR 5.91M (EUR 110k difference)',
