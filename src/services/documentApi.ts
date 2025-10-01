@@ -154,6 +154,23 @@ class DocumentAPI {
 
     throw new Error('Processing timeout - please try again');
   }
+
+  async generateReport(jobId: string): Promise<{ html: string; recommendation: string; filename: string }> {
+    const headers = await this.getAuthHeaders();
+
+    const response = await fetch(`${this.baseUrl}/generate-report`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ jobId })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Failed to generate report: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
 }
 
 export const documentApi = new DocumentAPI();

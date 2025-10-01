@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,8 @@ const DocumentUpload = () => {
   const [uploadedDoc, setUploadedDoc] = useState<DocumentUploadResponse | null>(null);
   const [vendorResults, setVendorResults] = useState<VendorData[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const { toast } = useToast();
 
   const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -56,6 +58,7 @@ const DocumentUpload = () => {
     try {
       // Start document processing
       const processResult = await documentApi.processDocument(documentId);
+      setCurrentJobId(processResult.job_id);
       
       toast({
         title: "Processing started",
@@ -110,6 +113,40 @@ const DocumentUpload = () => {
         return 'bg-destructive text-destructive-foreground';
       default:
         return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    if (!currentJobId) return;
+    
+    setIsGeneratingReport(true);
+    try {
+      const reportData = await documentApi.generateReport(currentJobId);
+      
+      // Create and download HTML file
+      const blob = new Blob([reportData.html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = reportData.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Report Generated",
+        description: "Your comparison report has been downloaded.",
+      });
+    } catch (error) {
+      console.error("Report generation error:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to generate report",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingReport(false);
     }
   };
 
@@ -201,7 +238,18 @@ const DocumentUpload = () => {
       {vendorResults.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Vendor Analysis Results</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Vendor Analysis Results</CardTitle>
+              <Button 
+                onClick={handleGenerateReport} 
+                disabled={isGeneratingReport || !currentJobId}
+                variant="outline"
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                {isGeneratingReport ? "Generating..." : "Generate Report"}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
