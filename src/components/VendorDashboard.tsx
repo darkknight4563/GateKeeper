@@ -76,26 +76,37 @@ const VendorDashboard: React.FC = () => {
   const handleGeneratePDF = () => {
     const doc = new jsPDF();
     
+    // Helper to format currency consistently
+    const formatCurrency = (amount: number, currency: string = 'EUR') => {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency
+      }).format(amount);
+    };
+    
     // Title
     doc.setFontSize(20);
     doc.text('Vendor Comparison Report', 14, 20);
     
     // Winner Recommendation
     if (stats) {
+      const winner = vendorResults.find(v => v.vendorName === stats.recommendedVendor);
+      const currency = winner?.currency || 'EUR';
+      
       doc.setFontSize(12);
       doc.setTextColor(0, 128, 0);
       doc.text(`Winner: ${stats.recommendedVendor}`, 14, 35);
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(10);
-      doc.text(`TCO: $${stats.recommendedTCO.toLocaleString()} | Lead Time: ${stats.recommendedLeadTime} days`, 14, 42);
-      doc.text(`Saves $${stats.totalSavings.toLocaleString()} vs worst option`, 14, 48);
+      doc.text(`TCO: ${formatCurrency(stats.recommendedTCO, currency)} | Lead Time: ${stats.recommendedLeadTime} days`, 14, 42);
+      doc.text(`Saves ${formatCurrency(stats.totalSavings, currency)} vs worst option`, 14, 48);
     }
     
     // Table data
     const tableData = vendorResults.map(vendor => [
       vendor.vendorName,
-      `$${vendor.quotedPrice.toLocaleString()}`,
-      `$${vendor.calculatedTCO.toLocaleString()}`,
+      formatCurrency(vendor.quotedPrice, vendor.currency),
+      formatCurrency(vendor.calculatedTCO, vendor.currency),
       `${vendor.leadTime} days`,
       `${vendor.riskScore}/100`,
       vendor.riskScore >= 70 ? 'High' : vendor.riskScore >= 40 ? 'Medium' : 'Low'
@@ -127,12 +138,13 @@ const VendorDashboard: React.FC = () => {
     
     // Summary stats
     if (stats) {
+      const currency = vendorResults[0]?.currency || 'EUR';
       const finalY = (doc as any).lastAutoTable.finalY + 10;
       doc.setFontSize(11);
       doc.text('Summary Statistics:', 14, finalY);
       doc.setFontSize(10);
       doc.text(`Total Vendors Analyzed: ${stats.totalVendors}`, 14, finalY + 7);
-      doc.text(`Average TCO: $${Math.round(stats.avgTCO).toLocaleString()}`, 14, finalY + 14);
+      doc.text(`Average TCO: ${formatCurrency(Math.round(stats.avgTCO), currency)}`, 14, finalY + 14);
       doc.text(`High Risk Vendors: ${stats.highRiskCount}`, 14, finalY + 21);
       
       // Risk Analysis Section
