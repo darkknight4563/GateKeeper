@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # React Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - supabase-db
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Supabase Local Database (for development)
+  supabase-db:
+    image: supabase/postgres:15.1.0.147
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: your-super-secret-password
+      POSTGRES_DB: postgres
+    volumes:
+      - supabase-db-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Supabase Studio (optional - for local database management)
+  supabase-studio:
+    image: supabase/studio:20231123-64a766a
+    ports:
+      - "3001:3000"
+    environment:
+      SUPABASE_URL: http://supabase-kong:8000
+      STUDIO_PG_META_URL: http://supabase-meta:8080
+    depends_on:
+      - supabase-db
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  supabase-db-data:
+
+networks:
+  app-network:
+    driver: bridge
