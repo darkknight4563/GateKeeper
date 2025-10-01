@@ -1,0 +1,87 @@
+import { VendorData } from './documentApi';
+
+// Real data extracted from uploaded vendor offers
+export const mockVendorOffers: VendorData[] = [
+  {
+    id: 'aker-001',
+    vendorName: 'Aker Solutions',
+    quotedPrice: 5400000,
+    calculatedTCO: 5670000, // Base + shipping + handling + risk premium
+    leadTime: 322, // 46 weeks = 322 days
+    riskScore: 35,
+    items: 2,
+    currency: 'EUR',
+    riskFactors: [
+      'Standard lead time (46 weeks)',
+      'Proven track record',
+      'Competitive pricing'
+    ],
+    tcoBreakdown: {
+      quotedPrice: 5400000,
+      shippingCosts: 120000,
+      handlingFees: 80000,
+      riskPremium: 70000,
+      qualityAdjustment: 0
+    }
+  },
+  {
+    id: 'technip-001',
+    vendorName: 'TechnipFMC',
+    quotedPrice: 5100000,
+    calculatedTCO: 5350000, // Best TCO
+    leadTime: 294, // 42 weeks = 294 days (fastest)
+    riskScore: 25,
+    items: 2,
+    currency: 'EUR',
+    riskFactors: [
+      'Fastest lead time (42 weeks)',
+      'Excellent certification compliance',
+      'Minor price variance (quoted vs calculated)'
+    ],
+    tcoBreakdown: {
+      quotedPrice: 5100000,
+      shippingCosts: 110000,
+      handlingFees: 70000,
+      riskPremium: 50000,
+      qualityAdjustment: 20000
+    }
+  },
+  {
+    id: 'onesubsea-001',
+    vendorName: 'OneSubsea',
+    quotedPrice: 5800000,
+    calculatedTCO: 6150000, // Highest TCO
+    leadTime: 378, // 54 weeks = 378 days (slowest)
+    riskScore: 55,
+    items: 2,
+    currency: 'EUR',
+    riskFactors: [
+      'Longest lead time (54 weeks)',
+      'Highest quoted price',
+      'Significant price variance (€5.8M quoted vs €5.91M calculated)',
+      'Complex milestone structure'
+    ],
+    tcoBreakdown: {
+      quotedPrice: 5800000,
+      shippingCosts: 130000,
+      handlingFees: 100000,
+      riskPremium: 120000,
+      qualityAdjustment: 0
+    }
+  }
+];
+
+// Mock processing response to match API format
+export const getMockProcessingResults = () => {
+  return {
+    job_id: 'mock-job-' + Date.now(),
+    status: 'completed',
+    results: mockVendorOffers,
+    summary: {
+      totalVendors: mockVendorOffers.length,
+      recommendedVendor: 'TechnipFMC',
+      avgTCO: mockVendorOffers.reduce((sum, v) => sum + v.calculatedTCO, 0) / mockVendorOffers.length,
+      highRiskCount: mockVendorOffers.filter(v => v.riskScore >= 70).length
+    }
+  };
+};

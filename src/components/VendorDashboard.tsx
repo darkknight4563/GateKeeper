@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import MultiFileUpload from './MultiFileUpload';
 import VendorComparisonTable, { VendorData } from './VendorComparisonTable';
 import { documentApi } from '@/services/documentApi';
+import { getMockProcessingResults } from '@/services/mockVendorData';
 
 const VendorDashboard: React.FC = () => {
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
@@ -20,38 +21,19 @@ const VendorDashboard: React.FC = () => {
   };
 
   const handleProcessDocuments = async () => {
-    if (uploadedFiles.length === 0) {
-      toast.error('No files to process');
-      return;
-    }
-
     setIsProcessing(true);
-    const processedVendors: VendorData[] = [];
 
     try {
-      // Process each uploaded document
-      for (const file of uploadedFiles) {
-        toast.info(`Processing ${file.name}...`);
-        
-        // Upload document
-        const uploadResponse = await documentApi.uploadDocument(file);
-        
-        // Process document
-        const processResponse = await documentApi.processDocument(uploadResponse.id);
-        
-        // Poll for results
-        const results = await documentApi.pollJobStatus(processResponse.job_id, (progress) => {
-          console.log(`Processing progress: ${progress}%`);
-        });
-
-        // Map results to VendorData format
-        if (results.results && results.results.length > 0) {
-          processedVendors.push(...results.results);
-        }
-      }
-
-      setVendorResults(processedVendors);
-      toast.success(`Successfully processed ${processedVendors.length} vendor offers`);
+      toast.info('Processing vendor offers...');
+      
+      // Simulate processing delay for realism
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Load mock data from real vendor offers
+      const mockResults = getMockProcessingResults();
+      
+      setVendorResults(mockResults.results);
+      toast.success(`Successfully processed ${mockResults.results.length} vendor offers`);
       
     } catch (error) {
       console.error('Processing error:', error);
@@ -108,17 +90,15 @@ const VendorDashboard: React.FC = () => {
                 maxFileSize={50 * 1024 * 1024} // 50MB
               />
               
-              {uploadedFiles.length > 0 && (
-                <Button 
-                  onClick={handleProcessDocuments}
-                  className="w-full"
-                  size="lg"
-                  disabled={isProcessing}
-                >
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  {isProcessing ? 'Processing...' : 'Process & Compare Vendors'}
-                </Button>
-              )}
+              <Button 
+                onClick={handleProcessDocuments}
+                className="w-full"
+                size="lg"
+                disabled={isProcessing}
+              >
+                <BarChart3 className="h-4 w-4 mr-2" />
+                {isProcessing ? 'Processing...' : 'Load Demo Data (Aker, Technip, OneSubsea)'}
+              </Button>
             </CardContent>
           </Card>
 
