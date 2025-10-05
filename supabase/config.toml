@@ -26,3 +26,6 @@ verify_jwt = true
 
 [functions.route-command]
 verify_jwt = true
+
+[functions.debug-extraction]
+verify_jwt = true
