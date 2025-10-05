@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
+import * as XLSX from 'https://esm.sh/xlsx@0.18.5'
 
 // Schema validation for API response
 const ItemSchema = z.object({
@@ -85,7 +86,7 @@ serve(async (req) => {
       )
     }
 
-    const { document_id, file_content } = await req.json()
+    const { document_id, file_content, filename, mime_type } = await req.json()
 
     if (!document_id) {
       return new Response(
@@ -94,7 +95,7 @@ serve(async (req) => {
       )
     }
 
-    console.log(`Processing document ${document_id}`)
+    console.log(`Processing document ${document_id}, type: ${mime_type}`)
 
     // Get document metadata
     const { data: document, error: docError } = await supabase
@@ -111,14 +112,73 @@ serve(async (req) => {
       )
     }
 
-    // Extract text content based on file type
-    let documentText = ''
+    // Parse file based on MIME type
+    let extractedText = ''
+    const mimeType = mime_type || document.mime_type
     
-    if (file_content) {
-      documentText = file_content
-    } else {
-      documentText = `Document content for ${document.filename}`
+    try {
+      if (mimeType === 'application/pdf') {
+        console.log('Parsing PDF - using simple text extraction')
+        // For PDF, we'll use a simpler approach - just extract visible text
+        // In production, you'd use a proper PDF library, but for now we'll work with what we have
+        try {
+          const textData = atob(file_content)
+          // Try to extract any readable text from the PDF
+          const matches = textData.match(/[\x20-\x7E]+/g) || []
+          extractedText = matches.filter(s => s.length > 3).join('\n')
+          console.log(`Basic PDF text extraction: ${extractedText.length} chars`)
+        } catch (e) {
+          console.warn('PDF parsing fallback:', e)
+          extractedText = `[PDF Document: ${filename}]\nFilename analysis: ${filename}`
+        }
+        
+      } else if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
+                 mimeType === 'application/vnd.ms-excel') {
+        console.log('Parsing Excel...')
+        const binaryData = Uint8Array.from(atob(file_content), c => c.charCodeAt(0))
+        const workbook = XLSX.read(binaryData, { type: 'array' })
+        
+        const sheets: string[] = []
+        workbook.SheetNames.forEach((sheetName: string) => {
+          const sheet = workbook.Sheets[sheetName]
+          const data: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false }) as any[][]
+          
+          sheets.push(`\n[Sheet: ${sheetName}]`)
+          data.forEach((row: any[], idx: number) => {
+            if (Array.isArray(row) && row.length > 0) {
+              sheets.push(`Row ${idx + 1}: ${row.join(' | ')}`)
+            }
+          })
+        })
+        extractedText = sheets.join('\n')
+        console.log(`Extracted ${workbook.SheetNames.length} sheets from Excel`)
+        
+      } else if (mimeType === 'text/csv') {
+        console.log('Parsing CSV...')
+        extractedText = atob(file_content)
+        console.log(`Extracted CSV content`)
+        
+      } else {
+        // Fallback for unknown types
+        console.warn(`Unsupported MIME type: ${mimeType}, attempting text extraction`)
+        try {
+          extractedText = atob(file_content)
+        } catch (e) {
+          extractedText = `[Document: ${filename}]\nUnsupported type: ${mimeType}`
+        }
+      }
+    } catch (parseError) {
+      console.error('File parsing error:', parseError)
+      // Don't fail completely - try to extract filename info at least
+      extractedText = `[Error parsing file: ${filename}]\nFilename: ${filename}\nType: ${mimeType}\nAttempting to extract vendor from filename...`
     }
+    
+    if (!extractedText || extractedText.length < 10) {
+      console.warn('No text extracted, using filename fallback')
+      extractedText = `Document: ${filename || document.filename}\nVendor information should be in the filename.`
+    }
+    
+    console.log(`Extracted text length: ${extractedText.length} characters`)
 
     // Call Lovable AI to extract structured vendor offer data with multilingual support
     const extractionPrompt = `You are an expert document parser for procurement documents with MANDATORY source citation.
@@ -219,8 +279,8 @@ EXAMPLES:
 ❌ WRONG: "delivery_weeks": null (extract it!)
 ❌ WRONG: No source citations
 
-Document content:
-${documentText}
+Document content (extracted from ${filename || document.filename}):
+${extractedText}
 
 Return ONLY valid JSON with ALL fields populated.`
 
