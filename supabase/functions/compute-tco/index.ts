@@ -57,12 +57,31 @@ serve(async (req) => {
 
     console.log(`Computing TCO for vendor offer ${validatedInput.vendor_offer_id}`);
 
+    // CRITICAL: Validate currency consistency
+    if (validatedInput.currency !== validatedInput.base_currency) {
+      const today = new Date().toISOString().split('T')[0];
+      return new Response(JSON.stringify({
+        diagnostic: true,
+        blocked_reason: 'currency_mismatch',
+        message: `Refusing to compute mixed-currency TCO without ECB rate ${today}.`,
+        details: `Vendor currency: ${validatedInput.currency}, Base currency: ${validatedInput.base_currency}`,
+        currencies: {
+          vendor_currency: validatedInput.currency,
+          base_currency: validatedInput.base_currency
+        },
+        hint: `Convert all costs to ${validatedInput.base_currency} before calling /compute-tco, or provide exchange rates.`
+      }), {
+        status: 422,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Verify user owns this vendor offer
     const { data: vendorOffer, error: offerError } = await supabase
       .from('vendor_offers')
       .select('*, documents(*)')
       .eq('id', validatedInput.vendor_offer_id)
-      .single();
+      .maybeSingle();
 
     if (offerError || !vendorOffer) {
       throw new Error('Vendor offer not found');

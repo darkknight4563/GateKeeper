@@ -116,6 +116,89 @@ serve(async (req) => {
       });
     }
 
+    // CRITICAL VALIDATION: Check for delivery_weeks and warranty_months
+    const dataGaps: { field: string; suppliers: { supplier: string; mime: string; source: string }[] }[] = [];
+    
+    const missingDelivery = documents.filter((doc: any) => {
+      const deliveryWeeks = doc.delivery_weeks || doc.terms?.delivery_weeks || doc.lead_time;
+      return deliveryWeeks === null || deliveryWeeks === undefined;
+    }).map((doc: any) => ({
+      supplier: doc.supplier || doc.supplier_name,
+      mime: doc.mime_type || doc.document_type || 'unknown',
+      source: doc.source || doc.terms?.source || '[Unknown]'
+    }));
+
+    const missingWarranty = documents.filter((doc: any) => {
+      const warrantyMonths = doc.warranty_months || doc.terms?.warranty_months;
+      return warrantyMonths === null || warrantyMonths === undefined;
+    }).map((doc: any) => ({
+      supplier: doc.supplier || doc.supplier_name,
+      mime: doc.mime_type || doc.document_type || 'unknown',
+      source: doc.source || doc.terms?.source || '[Unknown]'
+    }));
+
+    if (missingDelivery.length > 0) {
+      dataGaps.push({ field: 'delivery_weeks', suppliers: missingDelivery });
+    }
+    if (missingWarranty.length > 0) {
+      dataGaps.push({ field: 'warranty_months', suppliers: missingWarranty });
+    }
+
+    // Block report if ALL suppliers are missing critical fields
+    if (missingDelivery.length === documents.length || missingWarranty.length === documents.length) {
+      const diagnosticMessage = dataGaps.map(gap => {
+        const supplierDetails = gap.suppliers.map(s => 
+          `  - ${s.supplier}: MIME=${s.mime}, Source=${s.source}`
+        ).join('\n');
+        return `**${gap.field}** missing for ALL suppliers:\n${supplierDetails}`;
+      }).join('\n\n');
+
+      return new Response(JSON.stringify({
+        diagnostic: true,
+        blocked_reason: 'critical_data_missing',
+        message: `DIAGNOSTIC: Cannot generate report. Critical fields missing from all suppliers.`,
+        details: diagnosticMessage,
+        data_gaps: dataGaps,
+        hint: `Re-upload documents with delivery times and warranty information, or add this data manually in the document metadata.`
+      }), {
+        status: 422,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Check for mixed currencies without conversion rates
+    const currencies = new Set(documents.map((d: any) => d.currency || d.totals?.currency || currency_preference));
+    const hasMixedCurrencies = currencies.size > 1;
+    
+    if (hasMixedCurrencies) {
+      const missingRates: string[] = [];
+      const currenciesArray = Array.from(currencies) as string[];
+      
+      currenciesArray.forEach((curr: string) => {
+        if (curr !== currency_preference && !currency_rates[curr]) {
+          missingRates.push(curr);
+        }
+      });
+
+      if (missingRates.length > 0) {
+        const currencyList = currenciesArray.join(', ');
+        const today = new Date().toISOString().split('T')[0];
+        
+        return new Response(JSON.stringify({
+          diagnostic: true,
+          blocked_reason: 'mixed_currency_without_rates',
+          message: `Refusing to compute mixed-currency TCO without ECB rate ${today}.`,
+          details: `Detected currencies: ${currencyList}\nMissing conversion rates for: ${missingRates.join(', ')}`,
+          currencies_detected: currenciesArray,
+          missing_rates: missingRates,
+          hint: `Provide currency_rates object with conversion rates to ${currency_preference}. Example: {"NOK": 0.095, "EUR": 1.12}`
+        }), {
+          status: 422,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     // Build vendor comparison data with currency conversion
     const vendors = documents.map((doc: any) => {
       const vendorScore = scores.find((s: any) => s.supplier === doc.supplier || s.supplier === doc.supplier_name);
