@@ -151,26 +151,32 @@ serve(async (req) => {
         .update({ job_status: 'processing', progress: 10 })
         .eq('document_id', document_id)
 
-      // Get file content from processing job
-      const { data: jobData, error: jobError } = await supabase
-        .from('processing_jobs')
-        .select('result_data')
-        .eq('document_id', document_id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      let fileContent = jobData?.result_data?.file_content || ''
+      // Get storage path from document
+      const storagePath = document.file_path
       
-      // If no file content in job, generate placeholder
-      if (!fileContent || fileContent.length < 100) {
-        console.warn('No file content available, cannot extract real data')
-        fileContent = `Procurement Document
-Vendor: ${document.filename.replace(/Bilag.*?Prisskjema\s*/i, '').replace(/\.(xlsx|xls|pdf|csv)$/i, '').trim()}
-CRITICAL: Upload failed - no actual file content available for extraction.`
+      // Download file from storage
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from('procurement-documents')
+        .download(storagePath)
+
+      if (downloadError || !fileData) {
+        console.error('Storage download error:', downloadError)
+        await supabase
+          .from('processing_jobs')
+          .update({ job_status: 'failed', error_message: 'Failed to download file from storage' })
+          .eq('document_id', document_id)
+        
+        return new Response(
+          JSON.stringify({ error: 'Failed to download file from storage' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
       }
 
-      console.log('Processing with file content length:', fileContent.length)
+      // Convert blob to base64 for processing
+      const arrayBuffer = await fileData.arrayBuffer()
+      const base64Content = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+      
+      console.log('Processing file from storage:', storagePath, 'Size:', fileData.size)
 
       // Call document-processor to extract real vendor data using Lovable AI
       let vendorData
@@ -185,7 +191,9 @@ CRITICAL: Upload failed - no actual file content available for extraction.`
             },
             body: JSON.stringify({
               document_id: document_id,
-              file_content: fileContent
+              file_content: base64Content,
+              filename: document.filename,
+              mime_type: document.mime_type
             })
           }
         )

@@ -64,16 +64,31 @@ serve(async (req) => {
         )
       }
 
-      // Read file content as text/base64 depending on type
+      // Upload file to Supabase Storage
+      const filePath = `${user.id}/${Date.now()}-${file.name}`
       const arrayBuffer = await file.arrayBuffer()
-      const fileContent = new TextDecoder().decode(arrayBuffer)
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('procurement-documents')
+        .upload(filePath, arrayBuffer, {
+          contentType: file.type,
+          upsert: false
+        })
 
-      // Store file metadata AND content in database
+      if (uploadError) {
+        console.error('Storage upload error:', uploadError)
+        return new Response(
+          JSON.stringify({ error: 'Failed to upload file to storage' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Store file metadata in database
       const { data: document, error: dbError } = await supabase
         .from('documents')
         .insert({
           filename: file.name,
-          file_path: `${user.id}/${Date.now()}-${file.name}`,
+          file_path: filePath,
           file_size: file.size,
           mime_type: file.type,
           upload_status: 'completed',
@@ -90,7 +105,7 @@ serve(async (req) => {
         )
       }
 
-      // Create processing job with file content
+      // Create processing job
       const { data: job, error: jobError } = await supabase
         .from('processing_jobs')
         .insert({
@@ -98,7 +113,7 @@ serve(async (req) => {
           job_status: 'queued',
           job_type: 'document_analysis',
           progress: 0,
-          result_data: { file_content: fileContent } // Store file content for processing
+          result_data: { storage_path: filePath }
         })
         .select()
         .single()
@@ -114,7 +129,7 @@ serve(async (req) => {
           status: document.upload_status,
           job_id: job?.id || null,
           message: 'Document uploaded successfully',
-          file_content_length: fileContent.length
+          storage_path: filePath
         }),
         {
           status: 200,
