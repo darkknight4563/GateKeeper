@@ -1,5 +1,8 @@
 project_id = "***REMOVED***"
 
+[functions.generate-executive-summary]
+verify_jwt = true
+
 [functions.compute-tco]
 verify_jwt = true
 
