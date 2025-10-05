@@ -178,6 +178,23 @@ serve(async (req) => {
       
       console.log('Processing file from storage:', storagePath, 'Size:', fileData.size)
 
+      // Guard: Ensure file content is not empty or too small
+      if (!base64Content || base64Content.length < 1000) {
+        console.error('Empty or too small file content received:', base64Content.length, 'bytes')
+        await supabase
+          .from('processing_jobs')
+          .update({ 
+            job_status: 'failed', 
+            error_message: `Empty file content received (${base64Content.length} bytes)` 
+          })
+          .eq('document_id', document_id)
+        
+        return new Response(
+          JSON.stringify({ error: `Empty file content received (${base64Content.length} bytes)` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
       // Call document-processor to extract real vendor data using Lovable AI
       let vendorData
       try {
