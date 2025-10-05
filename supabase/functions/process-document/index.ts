@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
-import pdfParse from "https://esm.sh/pdf-parse@1.1.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,20 +22,33 @@ interface Fragment {
   metadata?: Record<string, any>;
 }
 
-// PDF parser - extracts text from PDF
+// PDF parser - simple text extraction from PDF bytes
 async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]> {
   const fragments: Fragment[] = [];
   
   try {
-    // @ts-ignore - pdf-parse expects Buffer but Uint8Array should work
-    const data = await pdfParse(bytes);
+    // Convert bytes to string and extract readable text
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    let text = decoder.decode(bytes);
     
-    if (data.text && data.text.trim().length > 0) {
+    // Remove PDF binary markers and extract text content
+    // This is a simple approach - looks for text between common PDF delimiters
+    text = text
+      .replace(/\/[A-Za-z]+\s+/g, ' ') // Remove PDF commands
+      .replace(/\[|\]|\(|\)/g, ' ')     // Remove brackets
+      .replace(/<<|>>/g, ' ')           // Remove angle brackets
+      .replace(/\s+/g, ' ')             // Normalize whitespace
+      .trim();
+    
+    // Filter out non-printable characters
+    text = text.replace(/[^\x20-\x7E\n\r\t]/g, '');
+    
+    if (text.length > 100) { // Require at least some content
       fragments.push({
         type: 'text',
-        content: data.text.trim(),
+        content: text,
         source: `${filename}`,
-        metadata: { pages: data.numpages }
+        metadata: {}
       });
     }
   } catch (error) {
