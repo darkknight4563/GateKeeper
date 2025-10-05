@@ -12,6 +12,7 @@ const ItemSchema = z.object({
   price: z.number().nullable(),
   delivery: z.string().nullable(),
   warranty: z.string().nullable(),
+  source: z.string().optional(), // Source location like "pdf#p2" or "xlsx#Sheet1!B5"
 })
 
 const TermsSchema = z.object({
@@ -20,6 +21,21 @@ const TermsSchema = z.object({
   validity: z.string().nullable(),
   location: z.string().nullable(),
   contact: z.string().nullable(),
+  delivery_weeks: z.number().nullable(),
+  warranty_months: z.number().nullable(),
+  source: z.string().optional(),
+}).nullable()
+
+const TechnicalSpecsSchema = z.object({
+  tubes: z.number().nullable(),
+  fibers: z.number().nullable(),
+  outer_diameter: z.string().nullable(),
+  weight: z.string().nullable(),
+  bend_radius: z.string().nullable(),
+  length: z.string().nullable(),
+  standards: z.array(z.string()).optional(),
+  certifications: z.array(z.string()).optional(),
+  source: z.string().optional(),
 }).nullable()
 
 const ExtractedDataSchema = z.object({
@@ -30,6 +46,8 @@ const ExtractedDataSchema = z.object({
   currency: z.string(),
   items: z.array(ItemSchema),
   terms: TermsSchema,
+  technical_specs: TechnicalSpecsSchema.optional(),
+  certifications: z.array(z.string()).optional(),
 })
 
 const corsHeaders = {
@@ -103,67 +121,108 @@ serve(async (req) => {
     }
 
     // Call Lovable AI to extract structured vendor offer data with multilingual support
-    const extractionPrompt = `You are an expert document parser for Norwegian medical equipment procurement documents (Prisskjema).
+    const extractionPrompt = `You are an expert document parser for procurement documents with MANDATORY source citation.
 
-CRITICAL INSTRUCTIONS:
-1. This is a Norwegian pricing sheet for ultrasound equipment
-2. Extract ALL pricing from the "Tilbutt enhetspris" (Offered unit price) or "Kostnad" (Cost) columns
-3. The main product is in the "Hovedprodukt" section - extract its price
-4. Optional items are in "Opsjon: vare/produkt/utstyr/kurs" section - extract all item prices
-5. Service levels are in "Opsjon: servicenivå" - extract annual service costs
-6. Currency is specified in the header row - look for "norwegian kroner" (NOK) or "USD dollars"
-7. Sum up the main product cost + all optional item costs for the total quoted price
+CRITICAL EXTRACTION REQUIREMENTS:
 
-PRICING EXTRACTION RULES:
-- Main product price is the first large price in Hovedprodukt section (e.g., 87000, 980000, 215000)
-- Each optional item has its own price in the "Tilbutt enhetspris" column
-- Ignore cells with "-" (means not applicable)
-- Ignore cells with "0" in training sections (free training)
-- For service levels, extract the per-year or per-hour prices
+1. **PRICING EXTRACTION** (Norwegian/English documents):
+   - Extract from "Tilbutt enhetspris" (Offered unit price) or "Kostnad" (Cost) columns
+   - Main product in "Hovedprodukt" section
+   - Optional items in "Opsjon: vare/produkt/utstyr/kurs" section
+   - Service levels in "Opsjon: servicenivå"
+   - Sum all costs for total quoted price
 
-JSON Schema:
+2. **DELIVERY & WARRANTY** (REQUIRED for risk analysis):
+   - Extract delivery time/lead time in WEEKS (convert months/days to weeks)
+   - Extract warranty period in MONTHS (convert years/weeks to months)
+   - Look for: "Leveringstid", "Lead time", "Delivery", "Garanti", "Warranty"
+   - Source: Cite page/section where found
+
+3. **CERTIFICATIONS** (REQUIRED for compliance):
+   - Extract ALL certifications mentioned: ISO 9001, ISO 13485, DNV-GL, API 17E, DNV-ST-F119
+   - Look in: Product descriptions, company info, compliance sections
+   - Return as array: ["ISO 9001", "DNV-GL", "API 17E"]
+
+4. **TECHNICAL SPECIFICATIONS** (REQUIRED for BOM):
+   - tubes: Number of tubes/cores (look for "tubes", "rør", "cores")
+   - fibers: Number of fibers per tube (look for "fibers", "fiber")
+   - outer_diameter: Outside diameter with unit (e.g., "1/2 inch", "12.7mm")
+   - weight: Weight with unit (e.g., "50 kg/km", "125 lb/ft")
+   - bend_radius: Minimum bend radius with unit (e.g., "0.5m", "20 inches")
+   - length: Cable/product length with unit (e.g., "5000m", "3.28 ft")
+   - standards: Array of standards (e.g., ["DNV-ST-F119", "API 17E", "ISO 9001"])
+
+5. **PAYMENT TERMS** (REQUIRED for contract analysis):
+   - Extract payment terms: "Net 30", "50/50", "Payment on delivery"
+   - Extract quote validity: Days valid (e.g., 30, 60, 90)
+
+6. **SOURCE CITATIONS** (MANDATORY):
+   - PDF: "pdf#p3" (page 3)
+   - XLSX: "xlsx#Sheet1!B5" (Sheet1, cell B5)
+   - DOCX: "docx#p2" (page 2)
+   - Cite EVERY numeric value and critical field
+
+JSON Schema (COMPLETE ALL FIELDS):
 {
   "language_detected": "no" or "en",
-  "supplier": "vendor name from document (Philips, Siemens, or GE)",
-  "document_type": "offer",
+  "supplier": "Philips" | "Siemens" | "GE" | "exact vendor name",
+  "document_type": "offer" | "quote" | "RFQ",
   "date": "document date or null",
-  "currency": "NOK" or "USD" (check header carefully),
+  "currency": "NOK" | "USD" | "EUR" (from header),
   "items": [
     {
       "name": "product name in English",
-      "name_original": "original Norwegian name",
-      "part_number": "article number if available",
-      "qty": quantity as number,
+      "name_original": "original Norwegian/native name",
+      "part_number": "article/part number",
+      "qty": numeric quantity,
       "unit": "per stykk, per år, per time, etc.",
-      "price": ACTUAL NUMERIC PRICE from Tilbutt enhetspris column,
-      "delivery": "lead time if specified",
-      "warranty": "warranty info if available"
+      "price": NUMERIC price from document,
+      "delivery": "delivery time as string (e.g., '4-6 weeks')",
+      "warranty": "warranty period as string (e.g., '24 months')",
+      "source": "pdf#p2" or similar
     }
   ],
   "terms": {
-    "payment": null,
-    "penalties": null,
-    "validity": null,
-    "location": "production country (USA / Kina, Danmark, Norge, etc.)",
-    "contact": null
-  }
+    "payment": "payment terms text (e.g., 'Net 30 days')",
+    "penalties": "late delivery penalties if any",
+    "validity": "quote validity text (e.g., '60 days')",
+    "location": "production country (USA, Kina, Danmark, Norge)",
+    "contact": "contact info if available",
+    "delivery_weeks": NUMERIC weeks (convert from months/days if needed),
+    "warranty_months": NUMERIC months (convert from years/weeks if needed),
+    "source": "pdf#p3" or location where terms found
+  },
+  "technical_specs": {
+    "tubes": numeric count or null,
+    "fibers": numeric count or null,
+    "outer_diameter": "value with unit" or null,
+    "weight": "value with unit" or null,
+    "bend_radius": "value with unit" or null,
+    "length": "value with unit" or null,
+    "standards": ["DNV-ST-F119", "API 17E", ...] or [],
+    "certifications": ["ISO 9001", "DNV-GL", ...] or [],
+    "source": "pdf#p4" or where specs found
+  },
+  "certifications": ["ISO 9001", "ISO 13485", "DNV-GL", "API 17E"] or []
 }
 
-EXAMPLES OF CORRECT EXTRACTION:
-- If you see "87,000" or "87000" in Tilbutt enhetspris for main product, extract price: 87000
-- If currency header says "norwegian kroner", currency is "NOK"
-- If currency header says "USD dollars", currency is "USD"
-- Main product Philips ultra: price 87000, currency USD
-- Main product Siemens Mediq: price 980000, currency NOK  
-- Main product GE Venue: price 215000, currency NOK
+CONVERSION RULES:
+- Delivery: "3 months" → 12-13 weeks, "45 days" → 6-7 weeks
+- Warranty: "2 years" → 24 months, "52 weeks" → 12 months
+- Always preserve original units in technical specs (don't convert 1/2" to mm)
 
-Do NOT return 0 or null for prices that clearly exist in the document.
-Extract every single line item with an actual price value.
+EXAMPLES:
+✅ CORRECT: "delivery_weeks": 8, "source": "pdf#p2"
+✅ CORRECT: "warranty_months": 24, "source": "pdf#p3"
+✅ CORRECT: "certifications": ["ISO 9001", "DNV-GL"]
+✅ CORRECT: "outer_diameter": "1/2 inch", "source": "pdf#p5"
+❌ WRONG: "delivery_weeks": null (extract it!)
+❌ WRONG: No source citations
 
 Document content:
 ${documentText}
 
-Return ONLY valid JSON.`
+Return ONLY valid JSON with ALL fields populated.`
 
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -227,7 +286,28 @@ Return ONLY valid JSON.`
           date: parsedData.date || null,
           currency: parsedData.currency || 'USD',
           items: Array.isArray(parsedData.items) ? parsedData.items : [],
-          terms: parsedData.terms || null,
+          terms: parsedData.terms || {
+            payment: null,
+            penalties: null,
+            validity: null,
+            location: null,
+            contact: null,
+            delivery_weeks: null,
+            warranty_months: null,
+            source: null
+          },
+          technical_specs: parsedData.technical_specs || {
+            tubes: null,
+            fibers: null,
+            outer_diameter: null,
+            weight: null,
+            bend_radius: null,
+            length: null,
+            standards: [],
+            certifications: [],
+            source: null
+          },
+          certifications: parsedData.certifications || [],
         }
       } else {
         extractedData = validationResult.data
@@ -237,91 +317,73 @@ Return ONLY valid JSON.`
       console.error('JSON parse error:', parseError, 'Content:', extractedContent)
       throw new Error('Failed to parse extracted data as JSON')
     }
-
+    
     // Validate and normalize the extracted data
     const items = Array.isArray(extractedData.items) ? extractedData.items : []
     const totalPrice = items.reduce((sum: number, item: any) => sum + (Number(item.price) || 0) * (Number(item.qty) || 0), 0)
     
-    // Extract technical specifications from items
-    const technicalSpecs: any = {}
+    // Extract technical specifications and certifications
+    const technicalSpecs = extractedData.technical_specs || {}
+    const certifications = extractedData.certifications || []
     const issues: string[] = []
     
-    // Look for technical spec items in the extracted data
-    items.forEach((item: any) => {
-      const name = (item.name || item.name_original || '').toLowerCase()
-      if (name.includes('tube') || name.includes('rør')) {
-        technicalSpecs.tubes = item.part_number || item.description
-      }
-      if (name.includes('fiber')) {
-        technicalSpecs.fibers = item.part_number || item.description
-      }
-      if (name.includes('diameter')) {
-        technicalSpecs.outerDiameter = item.description
-      }
-      if (name.includes('weight') || name.includes('vekt')) {
-        technicalSpecs.weight = item.description
-      }
-      if (name.includes('bend') || name.includes('bøy')) {
-        technicalSpecs.bendRadius = item.description
-      }
-      if (name.includes('length') || name.includes('lengde')) {
-        technicalSpecs.length = item.description
-      }
-      if (name.includes('spec') || name.includes('standard')) {
-        technicalSpecs.specification = item.description
-      }
-    })
-    
-    // Check for missing certifications
-    if (!extractedData.terms?.warranty && !items.some((i: any) => i.warranty)) {
-      issues.push('Warranty information not specified')
+    // Validate critical fields for pipeline
+    if (!extractedData.terms?.delivery_weeks) {
+      issues.push("Delivery time not specified")
+    }
+    if (!extractedData.terms?.warranty_months) {
+      issues.push("Warranty information not specified")
+    }
+    if (!certifications || certifications.length === 0) {
+      issues.push("ISO certification not mentioned")
+    }
+    if (!extractedData.terms?.payment) {
+      issues.push("Payment terms not specified")
     }
     
-    // Check for missing ISO certification
-    const hasCertification = items.some((i: any) => 
-      (i.name || i.name_original || '').toLowerCase().includes('iso')
-    )
-    if (!hasCertification) {
-      issues.push('ISO certification not mentioned')
-    }
-    
-    // Check for unclear delivery terms
-    if (!extractedData.terms?.delivery && !items.some((i: any) => i.delivery)) {
-      issues.push('Delivery terms unclear')
-    }
-    
+    // Prepare vendor offer data with all required fields
     const vendorData = {
-      language_detected: extractedData.language_detected || 'unknown',
-      vendor_name: extractedData.supplier || 'Unknown Vendor',
-      document_type: extractedData.document_type || 'unknown',
-      date: extractedData.date || null,
-      quoted_price: totalPrice || 0,
-      currency: extractedData.currency || 'USD',
+      language_detected: extractedData.language_detected,
+      vendor_name: extractedData.supplier,
+      document_type: extractedData.document_type,
+      date: extractedData.date,
+      quoted_price: totalPrice,
+      currency: extractedData.currency,
       items_count: items.length,
-      quoted_lead_time: items.length > 0 ? parseInt(items[0].delivery || '30') || 30 : 30,
-      certifications: [],
-      delivery_terms: extractedData.terms?.delivery || null,
-      payment_terms: extractedData.terms?.payment || null,
-      location: extractedData.terms?.location || 'Unknown',
+      quoted_lead_time: extractedData.terms?.delivery_weeks || null,
+      certifications: certifications,
+      delivery_terms: extractedData.terms?.delivery_weeks ? `${extractedData.terms.delivery_weeks} weeks` : null,
+      payment_terms: extractedData.terms?.payment,
+      location: extractedData.terms?.location || "Unknown",
       items: items.map((item: any) => ({
-        part_number: item.part_number || null,
-        description: item.name || item.name_original || 'Unknown Item',
-        description_original: item.name_original || item.name || null,
-        quantity: Number(item.qty) || 0,
-        unit: item.unit || 'pcs',
-        unit_price: Number(item.price) || 0,
-        total_price: (Number(item.price) || 0) * (Number(item.qty) || 0),
-        delivery_time: item.delivery || null,
-        warranty: item.warranty || null
+        part_number: item.part_number,
+        description: item.name,
+        description_original: item.name_original,
+        quantity: item.qty,
+        unit: item.unit,
+        unit_price: item.price,
+        total_price: (item.price || 0) * (item.qty || 0),
+        delivery_time: item.delivery,
+        warranty: item.warranty,
+        source: item.source
       })),
-      terms: extractedData.terms || {},
-      delivery_history: 'unknown',
-      quoted_total: totalPrice || 0,
-      line_item_total: totalPrice || 0,
+      terms: {
+        payment: extractedData.terms?.payment,
+        penalties: extractedData.terms?.penalties,
+        validity: extractedData.terms?.validity,
+        location: extractedData.terms?.location,
+        contact: extractedData.terms?.contact,
+        delivery_weeks: extractedData.terms?.delivery_weeks,
+        warranty_months: extractedData.terms?.warranty_months,
+        source: extractedData.terms?.source
+      },
+      delivery_history: "unknown",
+      quoted_total: totalPrice,
+      line_item_total: totalPrice,
       technical_specs: technicalSpecs,
       issues: issues
     }
-
+    
     console.log('Processed vendor data:', vendorData)
 
     return new Response(
