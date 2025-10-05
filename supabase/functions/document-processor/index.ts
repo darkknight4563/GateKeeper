@@ -95,7 +95,18 @@ serve(async (req) => {
       )
     }
 
-    console.log(`Processing document ${document_id}, type: ${mime_type}`)
+    // Guard: Validate file_content is not empty
+    if (!file_content || file_content.length < 1000) {
+      console.error('Empty or too small file content received in document-processor:', file_content?.length || 0, 'bytes')
+      return new Response(
+        JSON.stringify({ 
+          error: `Empty file content received in document-processor (${file_content?.length || 0} bytes). File may not have uploaded correctly.` 
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log(`Processing document ${document_id}, type: ${mime_type}, content size: ${file_content.length} bytes`)
 
     // Get document metadata
     const { data: document, error: docError } = await supabase
