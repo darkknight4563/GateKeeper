@@ -64,6 +64,22 @@ serve(async (req) => {
         )
       }
 
+      // Check if bucket exists, create if not
+      const { data: buckets } = await supabase.storage.listBuckets()
+      const bucketExists = buckets?.some(b => b.name === 'procurement-documents')
+      
+      if (!bucketExists) {
+        const { error: bucketError } = await supabase.storage.createBucket('procurement-documents', {
+          public: false,
+          fileSizeLimit: 52428800 // 50MB
+        })
+        
+        if (bucketError) {
+          console.error('Bucket creation error:', bucketError)
+          // Continue anyway - bucket might exist from another request
+        }
+      }
+
       // Upload file to Supabase Storage
       const filePath = `${user.id}/${Date.now()}-${file.name}`
       const arrayBuffer = await file.arrayBuffer()
