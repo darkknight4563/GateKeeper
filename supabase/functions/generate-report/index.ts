@@ -176,7 +176,7 @@ function deriveIssuesFromData(extractedData: any) {
   const hasDelivery = !!extractedData?.terms?.delivery || items.some((i: any) => i?.delivery);
   if (!hasDelivery) issues.push('Delivery terms unclear');
   const hasISO = items.some((i: any) => String(i?.name || i?.name_original || '').toLowerCase().includes('iso'));
-  if (!hasISO) issues.push('ISO certification not mentioned');
+  if (!hasISO) issues.push('Missing ISO 9001 certification');
   return issues;
 }
 
@@ -249,24 +249,36 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
     `;
   }).join('');
 
-  // Issues & Clarifications section
-  const issuesAndClarifications = vendors.map(v => {
-    const extractedData = v.extracted_data || {};
-    const issues = (Array.isArray(extractedData.issues) && extractedData.issues.length > 0)
-      ? extractedData.issues
-      : deriveIssuesFromData(extractedData);
-    
-    if (issues.length === 0) return '';
-    
+  // Issues & Clarifications section (always render)
+  const issuesSectionHTML = (() => {
+    const sections = vendors.map(v => {
+      const extractedData = v.extracted_data || {};
+      const issues = (Array.isArray(extractedData.issues) && extractedData.issues.length > 0)
+        ? extractedData.issues
+        : deriveIssuesFromData(extractedData);
+      if (issues.length === 0) return '';
+      return `
+        <div style="margin-bottom: 15px;">
+          <h3 style="color: #1f2937; margin: 5px 0;">${v.vendor_name} (${issues.length} ${issues.length === 1 ? 'issue' : 'issues'})</h3>
+          <ul style="margin: 5px 0 15px 0; padding-left: 20px;">
+            ${issues.map((issue: string) => `<li>${issue}</li>`).join('')}
+          </ul>
+        </div>
+      `;
+    }).join('');
+
+    if (sections.trim().length === 0) {
+      return `
+        <h2>ISSUES & CLARIFICATIONS NEEDED</h2>
+        <p style="margin: 5px 0; color: #6b7280;">No issues identified across vendors.</p>
+      `;
+    }
+
     return `
-      <div style="margin-bottom: 15px;">
-        <h3 style="color: #1f2937; margin: 5px 0;">${v.vendor_name} (${issues.length} ${issues.length === 1 ? 'issue' : 'issues'})</h3>
-        <ul style="margin: 5px 0 15px 0; padding-left: 20px;">
-          ${issues.map((issue: string) => `<li>${issue}</li>`).join('')}
-        </ul>
-      </div>
+      <h2>ISSUES & CLARIFICATIONS NEEDED</h2>
+      ${sections}
     `;
-  }).join('');
+  })();
 
   // Technical Specifications (BOM) table
   const bomTable = `
@@ -445,10 +457,7 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
   <h2>Risk Score Analysis</h2>
   ${riskAnalysis}
 
-  ${issuesAndClarifications ? `
-    <h2>ISSUES & CLARIFICATIONS NEEDED</h2>
-    ${issuesAndClarifications}
-  ` : ''}
+  ${issuesSectionHTML}
 
   <h2>Technical Specifications (BOM)</h2>
   ${bomTable}
