@@ -270,81 +270,65 @@ serve(async (req) => {
     }
 
     // Call Lovable AI with structured fragments and strict extraction rules
-    const extractionPrompt = `You are an expert procurement document parser. Extract ONLY data present in the provided fragments.
+    const extractionPrompt = `You are ClarityChain's procurement document extractor. Extract data using ONLY the provided fragments below.
 
 CRITICAL RULES:
-1. **NO HALLUCINATION**: Only extract fields that are explicitly present in fragments
-2. **MANDATORY SOURCE**: Every numeric value MUST include its source pointer
-3. **DATA GAPS**: If a field is missing, set to null and add a note in validation_notes
-4. **SUPPLIER HINT**: Use doc_meta.supplier_hint as a starting point for vendor name
+1. **NO HALLUCINATION**: Extract ONLY values explicitly present in fragments
+2. **MANDATORY SOURCE TRACKING**: Every numeric field (delivery_weeks, warranty_months, unit_price, subtotal, quoted_price) MUST include a "source" field copied from the corresponding fragment.source
+3. **DATA GAPS**: If you cannot find a value in any fragment, set it to null and add a note: "[Data Gap] field-name not found in fragments"
+4. **DO NOT INFER**: Do not calculate, estimate, or fabricate any values
 
 STRUCTURED PAYLOAD:
 ${JSON.stringify(payload, null, 2)}
 
-EXTRACTION SCHEMA:
+REQUIRED OUTPUT SCHEMA:
 {
-  "language_detected": "no" | "en" | "unknown",
-  "supplier": "exact vendor name from fragments or supplier_hint",
-  "document_type": "offer" | "quote" | "RFQ" | null,
-  "date": "YYYY-MM-DD or null",
-  "currency": "NOK" | "USD" | "EUR" | null,
-  "items": [
+  "documents": [
     {
-      "name": "product name in English",
-      "name_original": "original language name",
-      "part_number": "part/article number or null",
-      "qty": numeric or null,
-      "unit": "stk | år | time | m | etc. or null",
-      "price": numeric or null,
-      "delivery": "delivery time string or null",
-      "warranty": "warranty period string or null",
-      "source": "fragment source pointer (REQUIRED for price, delivery, warranty)"
+      "supplier": "<string|null>",
+      "currency": "<string|null>",
+      "terms": {
+        "delivery_weeks": <number|null>,
+        "warranty_months": <number|null>,
+        "payment_terms": "<string|null>",
+        "source_terms": "<source from fragment or null>"
+      },
+      "line_items": [
+        {
+          "name": "<string>",
+          "qty": <number|null>,
+          "unit": "<string|null>",
+          "unit_price": <number|null>,
+          "subtotal": <number|null>,
+          "source": "<source from fragment - REQUIRED for unit_price/subtotal>"
+        }
+      ],
+      "totals": {
+        "quoted_price": <number|null>,
+        "source": "<source from fragment - REQUIRED if quoted_price is not null>"
+      }
     }
   ],
-  "terms": {
-    "payment": "payment terms or null",
-    "penalties": "penalties or null",
-    "validity": "quote validity or null",
-    "location": "production country or null",
-    "contact": "contact info or null",
-    "delivery_weeks": numeric weeks or null,
-    "warranty_months": numeric months or null,
-    "source": "fragment source or null"
-  },
-  "technical_specs": {
-    "tubes": numeric or null,
-    "fibers": numeric or null,
-    "outer_diameter": "value with unit or null",
-    "weight": "value with unit or null",
-    "bend_radius": "value with unit or null",
-    "length": "value with unit or null",
-    "standards": ["standard1", ...] or [],
-    "certifications": ["cert1", ...] or [],
-    "source": "fragment source or null"
-  },
-  "certifications": ["ISO 9001", ...] or [],
-  "validation_notes": [
-    "[Data Gap] Delivery time not found in fragments",
-    "[Data Gap] Warranty not specified",
-    ...
+  "notes": [
+    "[Data Gap] delivery_weeks not found in fragments",
+    "[Data Gap] warranty_months not mentioned"
   ]
 }
 
-CONVERSION RULES (only if data is present):
-- Delivery: "3 months" → 12-13 weeks, "45 days" → 6-7 weeks
+CONVERSION RULES (only apply if data is explicitly present):
+- Delivery: "3 months" → 12-13 weeks, "45 days" → ~6 weeks
 - Warranty: "2 years" → 24 months, "52 weeks" → 12 months
 
-EXAMPLES OF CORRECT EXTRACTION:
-✅ "price": 15000, "source": "Philips.xlsx#Sheet1!D5"
-✅ "delivery_weeks": 34, "source": "offer.pdf#p2"
-✅ "validation_notes": ["[Data Gap] Certifications not mentioned"]
-✅ "warranty_months": null (when not found in fragments)
+EXAMPLES:
+✅ CORRECT: "unit_price": 1500, "source": "offer.pdf#p2"
+✅ CORRECT: "delivery_weeks": 34, "source_terms": "Philips.xlsx#Sheet1!B5"
+✅ CORRECT: "warranty_months": null (when not in fragments, add note)
 
-❌ WRONG: Making up delivery times not in fragments
-❌ WRONG: Assuming certifications without evidence
-❌ WRONG: Missing source pointers on numeric values
+❌ WRONG: "delivery_weeks": 8 (when not in fragments - this is hallucination)
+❌ WRONG: "unit_price": 1500 (missing "source" field)
+❌ WRONG: Making assumptions about values not in fragments
 
-Return ONLY valid JSON matching the schema.`
+Return ONLY valid JSON matching the schema above. No markdown, no explanations.`
 
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -381,67 +365,100 @@ Return ONLY valid JSON matching the schema.`
     console.log('Raw AI response:', extractedContent)
 
     // Parse the JSON response (handle potential markdown code blocks)
-    let extractedData
-    let validationNotes: string[] = []
+    let parsedResponse
     
     try {
       const jsonMatch = extractedContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
       const jsonStr = jsonMatch ? jsonMatch[1] : extractedContent
-      const parsedData = JSON.parse(jsonStr.trim())
-      
-      // Validate the parsed data against schema
-      const validationResult = ExtractedDataSchema.safeParse(parsedData)
-      
-      if (!validationResult.success) {
-        console.warn('Schema validation failed:', validationResult.error.errors)
-        
-        // Track missing/invalid fields
-        validationResult.error.errors.forEach(err => {
-          validationNotes.push(`Missing or invalid field: ${err.path.join('.')} - ${err.message}`)
-        })
-        
-        // Fill missing required fields with defaults
-        extractedData = {
-          language_detected: parsedData.language_detected || 'unknown',
-          supplier: parsedData.supplier || null,
-          document_type: parsedData.document_type || null,
-          date: parsedData.date || null,
-          currency: parsedData.currency || 'USD',
-          items: Array.isArray(parsedData.items) ? parsedData.items : [],
-          terms: parsedData.terms || {
-            payment: null,
-            penalties: null,
-            validity: null,
-            location: null,
-            contact: null,
-            delivery_weeks: null,
-            warranty_months: null,
-            source: null
-          },
-          technical_specs: parsedData.technical_specs || {
-            tubes: null,
-            fibers: null,
-            outer_diameter: null,
-            weight: null,
-            bend_radius: null,
-            length: null,
-            standards: [],
-            certifications: [],
-            source: null
-          },
-          certifications: parsedData.certifications || [],
-        }
-      } else {
-        extractedData = validationResult.data
-      }
-      
+      parsedResponse = JSON.parse(jsonStr.trim())
     } catch (parseError) {
       console.error('JSON parse error:', parseError, 'Content:', extractedContent)
       throw new Error('Failed to parse extracted data as JSON')
     }
+
+    // Validate extracted data for critical fields
+    const documents = parsedResponse.documents || []
+    const notes = parsedResponse.notes || []
     
-    // Validate and normalize the extracted data
-    const items = Array.isArray(extractedData.items) ? extractedData.items : []
+    if (documents.length === 0) {
+      console.error('DIAGNOSTIC: No documents extracted from fragments')
+      return new Response(
+        JSON.stringify({
+          error: 'DIAGNOSTIC: Extraction returned no documents',
+          fragments_searched: parsedFragments.map(f => ({ source: f.source, preview: (f.text || '').substring(0, 100) })),
+          notes: notes
+        }),
+        { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Check if ALL critical fields are missing (fail-fast validation)
+    const allDocsMissingCriticalData = documents.every((doc: any) => 
+      (!doc.terms?.delivery_weeks && !doc.terms?.warranty_months) &&
+      (!doc.line_items || doc.line_items.length === 0)
+    )
+
+    if (allDocsMissingCriticalData) {
+      console.error('DIAGNOSTIC: All documents missing critical fields (delivery_weeks, warranty_months, line_items)')
+      
+      const missingFields: string[] = []
+      documents.forEach((doc: any, idx: number) => {
+        if (!doc.terms?.delivery_weeks) missingFields.push(`Document ${idx}: delivery_weeks`)
+        if (!doc.terms?.warranty_months) missingFields.push(`Document ${idx}: warranty_months`)
+        if (!doc.line_items || doc.line_items.length === 0) missingFields.push(`Document ${idx}: line_items`)
+      })
+
+      return new Response(
+        JSON.stringify({
+          error: 'DIAGNOSTIC: Extraction returned no usable fields; blocking compose',
+          missing_fields: missingFields,
+          fragments_searched: parsedFragments.map(f => ({ 
+            source: f.source, 
+            preview: (f.text || JSON.stringify(f.table || '')).substring(0, 150) 
+          })),
+          notes: notes,
+          documents_extracted: documents
+        }),
+        { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Convert to legacy format for backward compatibility
+    const firstDoc = documents[0]
+    const items = (firstDoc.line_items || []).map((item: any) => ({
+      name: item.name || null,
+      name_original: item.name || null,
+      part_number: null,
+      qty: item.qty,
+      unit: item.unit,
+      price: item.unit_price,
+      delivery: null,
+      warranty: null,
+      source: item.source
+    }))
+
+    const extractedData = {
+      language_detected: 'unknown',
+      supplier: firstDoc.supplier || null,
+      document_type: null,
+      date: null,
+      currency: firstDoc.currency || null,
+      items: items,
+      terms: {
+        payment: firstDoc.terms?.payment_terms,
+        penalties: null,
+        validity: null,
+        location: null,
+        contact: null,
+        delivery_weeks: firstDoc.terms?.delivery_weeks,
+        warranty_months: firstDoc.terms?.warranty_months,
+        source: firstDoc.terms?.source_terms
+      },
+      technical_specs: null,
+      certifications: []
+    }
+    
+    // Calculate totals from the extracted items
     const totalPrice = items.reduce((sum: number, item: any) => sum + (Number(item.price) || 0) * (Number(item.qty) || 0), 0)
     
     // Extract technical specifications and certifications
@@ -513,7 +530,7 @@ Return ONLY valid JSON matching the schema.`
         success: true,
         vendor_data: vendorData,
         raw_extraction: extractedData,
-        validation_notes: validationNotes.length > 0 ? validationNotes : undefined
+        extraction_notes: notes
       }),
       { 
         status: 200, 
