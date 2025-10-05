@@ -1,5 +1,8 @@
 project_id = "***REMOVED***"
 
+[functions.convert-currency]
+verify_jwt = false
+
 [functions.generate-charts]
 verify_jwt = true
 
