@@ -77,6 +77,7 @@ class AdvancedDocumentAPI {
 
   private async getAuthHeaders() {
     const { data: { session } } = await supabase.auth.getSession();
+    const anonKey = '***REMOVED***';
     
     if (!session?.access_token) {
       throw new Error('User not authenticated');
@@ -84,6 +85,7 @@ class AdvancedDocumentAPI {
 
     return {
       'Authorization': `Bearer ${session.access_token}`,
+      'apikey': anonKey,
       'Content-Type': 'application/json'
     };
   }

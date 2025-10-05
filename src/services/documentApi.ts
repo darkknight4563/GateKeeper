@@ -59,6 +59,7 @@ class DocumentAPI {
 
   private async getAuthHeaders() {
     const { data: { session } } = await supabase.auth.getSession();
+    const anonKey = '***REMOVED***';
     
     if (!session?.access_token) {
       throw new Error('Please log in to process documents');
@@ -66,6 +67,7 @@ class DocumentAPI {
 
     return {
       'Authorization': `Bearer ${session.access_token}`,
+      'apikey': anonKey,
       'Content-Type': 'application/json'
     };
   }
@@ -80,6 +82,7 @@ class DocumentAPI {
 
   async uploadDocument(file: File): Promise<DocumentUploadResponse> {
     const { data: { session } } = await supabase.auth.getSession();
+    const anonKey = '***REMOVED***';
     
     if (!session?.access_token) {
       throw new Error('Please log in to upload documents');
@@ -109,8 +112,11 @@ class DocumentAPI {
 
     const response = await fetch(`${this.baseUrl}/upload-document`, {
       method: 'POST',
+      mode: 'cors',
+      credentials: 'omit',
       headers: {
         'Authorization': `Bearer ${session.access_token}`,
+        'apikey': anonKey,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
@@ -129,6 +135,8 @@ class DocumentAPI {
 
     const response = await fetch(`${this.baseUrl}/process-document`, {
       method: 'POST',
+      mode: 'cors',
+      credentials: 'omit',
       headers,
       body: JSON.stringify({ document_id: documentId })
     });

@@ -293,12 +293,14 @@ serve(async (req) => {
     console.log(`Extracted ${fragments.length} fragments from ${filename}`);
 
     // Call document-processor with structured fragments
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
     const processorResponse = await fetch(
       `${Deno.env.get('SUPABASE_URL')}/functions/v1/document-processor`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'apikey': anonKey!,
           'Authorization': authHeader
         },
         body: JSON.stringify({
