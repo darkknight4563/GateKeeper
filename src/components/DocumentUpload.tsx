@@ -19,6 +19,25 @@ const DocumentUpload = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // Validation guards
+    if (file.size === 0) {
+      toast({
+        title: "Empty file",
+        description: "Please select a valid file",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "File exceeds 50MB limit",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (file.type !== 'application/pdf') {
       toast({
         title: "Invalid file type",

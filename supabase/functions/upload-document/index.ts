@@ -39,17 +39,32 @@ serve(async (req) => {
     }
 
     if (req.method === 'POST') {
-      const formData = await req.formData()
-      const file = formData.get('file') as File
+      // Parse JSON body with base64 file content
+      const { filename, mime, size, file_b64 } = await req.json();
 
-      if (!file) {
+      if (!filename || !file_b64) {
         return new Response(
-          JSON.stringify({ error: 'No file provided' }),
+          JSON.stringify({ error: 'Missing filename or file_b64' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      // Validate file type (PDF, Excel, CSV)
+      // Validation guards
+      if (!size || size === 0) {
+        return new Response(
+          JSON.stringify({ error: 'Empty file received' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      if (size > 50 * 1024 * 1024) {
+        return new Response(
+          JSON.stringify({ error: 'File exceeds 50MB limit' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Validate file type
       const allowedTypes = [
         'application/pdf',
         'application/vnd.ms-excel',
@@ -57,12 +72,23 @@ serve(async (req) => {
         'text/csv'
       ]
 
-      if (!allowedTypes.includes(file.type)) {
+      if (!allowedTypes.includes(mime)) {
         return new Response(
           JSON.stringify({ error: 'Invalid file type. Only PDF, Excel, and CSV files are allowed.' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
+
+      console.log(`Received upload: ${filename}, ${size} bytes, MIME: ${mime}, base64 length: ${file_b64.length}`);
+
+      // Decode base64 to bytes
+      const binaryString = atob(file_b64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      console.log(`Decoded ${bytes.length} bytes from base64`);
 
       // Check if bucket exists, create if not
       const { data: buckets } = await supabase.storage.listBuckets()
@@ -81,13 +107,12 @@ serve(async (req) => {
       }
 
       // Upload file to Supabase Storage
-      const filePath = `${user.id}/${Date.now()}-${file.name}`
-      const arrayBuffer = await file.arrayBuffer()
+      const filePath = `${user.id}/${Date.now()}-${filename}`
       
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('procurement-documents')
-        .upload(filePath, arrayBuffer, {
-          contentType: file.type,
+        .upload(filePath, bytes.buffer, {
+          contentType: mime,
           upsert: false
         })
 
@@ -103,10 +128,10 @@ serve(async (req) => {
       const { data: document, error: dbError } = await supabase
         .from('documents')
         .insert({
-          filename: file.name,
+          filename: filename,
           file_path: filePath,
-          file_size: file.size,
-          mime_type: file.type,
+          file_size: size,
+          mime_type: mime,
           upload_status: 'completed',
           user_id: user.id
         })

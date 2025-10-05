@@ -70,6 +70,14 @@ class DocumentAPI {
     };
   }
 
+  private guessMime(filename: string): string {
+    if (filename.endsWith('.pdf')) return 'application/pdf';
+    if (filename.endsWith('.xlsx')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    if (filename.endsWith('.xls')) return 'application/vnd.ms-excel';
+    if (filename.endsWith('.csv')) return 'text/csv';
+    return 'application/octet-stream';
+  }
+
   async uploadDocument(file: File): Promise<DocumentUploadResponse> {
     const { data: { session } } = await supabase.auth.getSession();
     
@@ -77,20 +85,40 @@ class DocumentAPI {
       throw new Error('Please log in to upload documents');
     }
 
-    const formData = new FormData();
-    formData.append('file', file);
+    // Validation guards
+    if (!file || file.size === 0) {
+      throw new Error('Empty file selected');
+    }
+    
+    if (file.size > 50 * 1024 * 1024) {
+      throw new Error('File exceeds 50MB limit');
+    }
+
+    // Convert file to base64
+    const arrayBuf = await file.arrayBuffer();
+    const b64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuf)));
+    
+    const payload = {
+      filename: file.name,
+      mime: file.type || this.guessMime(file.name),
+      size: file.size,
+      file_b64: b64
+    };
+
+    console.log(`Uploading ${file.name}: ${file.size} bytes, MIME: ${payload.mime}`);
 
     const response = await fetch(`${this.baseUrl}/upload-document`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${session.access_token}`
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json'
       },
-      body: formData,
+      body: JSON.stringify(payload)
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `Upload failed: ${response.statusText}`);
+      const txt = await response.text();
+      throw new Error(`Upload failed: ${response.status} ${txt}`);
     }
 
     return response.json();
