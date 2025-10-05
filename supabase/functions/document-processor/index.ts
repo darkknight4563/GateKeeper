@@ -242,6 +242,54 @@ Return ONLY valid JSON.`
     const items = Array.isArray(extractedData.items) ? extractedData.items : []
     const totalPrice = items.reduce((sum: number, item: any) => sum + (Number(item.price) || 0) * (Number(item.qty) || 0), 0)
     
+    // Extract technical specifications from items
+    const technicalSpecs: any = {}
+    const issues: string[] = []
+    
+    // Look for technical spec items in the extracted data
+    items.forEach((item: any) => {
+      const name = (item.name || item.name_original || '').toLowerCase()
+      if (name.includes('tube') || name.includes('rør')) {
+        technicalSpecs.tubes = item.part_number || item.description
+      }
+      if (name.includes('fiber')) {
+        technicalSpecs.fibers = item.part_number || item.description
+      }
+      if (name.includes('diameter')) {
+        technicalSpecs.outerDiameter = item.description
+      }
+      if (name.includes('weight') || name.includes('vekt')) {
+        technicalSpecs.weight = item.description
+      }
+      if (name.includes('bend') || name.includes('bøy')) {
+        technicalSpecs.bendRadius = item.description
+      }
+      if (name.includes('length') || name.includes('lengde')) {
+        technicalSpecs.length = item.description
+      }
+      if (name.includes('spec') || name.includes('standard')) {
+        technicalSpecs.specification = item.description
+      }
+    })
+    
+    // Check for missing certifications
+    if (!extractedData.terms?.warranty && !items.some((i: any) => i.warranty)) {
+      issues.push('Warranty information not specified')
+    }
+    
+    // Check for missing ISO certification
+    const hasCertification = items.some((i: any) => 
+      (i.name || i.name_original || '').toLowerCase().includes('iso')
+    )
+    if (!hasCertification) {
+      issues.push('ISO certification not mentioned')
+    }
+    
+    // Check for unclear delivery terms
+    if (!extractedData.terms?.delivery && !items.some((i: any) => i.delivery)) {
+      issues.push('Delivery terms unclear')
+    }
+    
     const vendorData = {
       language_detected: extractedData.language_detected || 'unknown',
       vendor_name: extractedData.supplier || 'Unknown Vendor',
@@ -269,7 +317,9 @@ Return ONLY valid JSON.`
       terms: extractedData.terms || {},
       delivery_history: 'unknown',
       quoted_total: totalPrice || 0,
-      line_item_total: totalPrice || 0
+      line_item_total: totalPrice || 0,
+      technical_specs: technicalSpecs,
+      issues: issues
     }
 
     console.log('Processed vendor data:', vendorData)

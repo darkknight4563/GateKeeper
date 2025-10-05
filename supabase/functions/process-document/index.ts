@@ -291,7 +291,11 @@ GRAND TOTAL: ${mainProductPrice + optionalItems.reduce((sum, item) => sum + (ite
           quoted_price: vendorData.quoted_price,
           currency: vendorData.currency || 'USD',
           items_count: vendorData.items_count,
-          extracted_data: vendorData
+          extracted_data: {
+            ...vendorData,
+            technical_specs: vendorData.technical_specs || {},
+            issues: vendorData.issues || []
+          }
         })
         .select()
         .single()
