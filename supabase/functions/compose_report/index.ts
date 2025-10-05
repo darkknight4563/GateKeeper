@@ -83,7 +83,8 @@ serve(async (req) => {
       issues, 
       bom, 
       currency_preference = 'USD',
-      locale = 'en-US' 
+      locale = 'en-US',
+      currency_rates = {} // Optional: { NOK: 0.095, EUR: 1.12 } - conversion to USD
     } = await req.json();
 
     console.log('Compose report inputs:', { 
@@ -92,7 +93,8 @@ serve(async (req) => {
       issuesCount: issues?.length,
       bomCount: bom?.length,
       currency_preference,
-      locale
+      locale,
+      currency_rates
     });
 
     // Validate inputs - check for missing stages
@@ -114,23 +116,51 @@ serve(async (req) => {
       });
     }
 
-    // Build vendor comparison data
+    // Build vendor comparison data with currency conversion
     const vendors = documents.map((doc: any) => {
-      const vendorScore = scores.find((s: any) => s.supplier === doc.supplier);
-      const vendorIssues = issues.filter((i: any) => i.supplier === doc.supplier);
-      const vendorBom = bom.find((b: any) => b.supplier === doc.supplier);
+      const vendorScore = scores.find((s: any) => s.supplier === doc.supplier || s.supplier === doc.supplier_name);
+      const vendorIssues = issues.filter((i: any) => i.supplier === doc.supplier || i.supplier === doc.supplier_name);
+      const vendorBom = bom.find((b: any) => b.supplier === doc.supplier || b.supplier === doc.supplier_name);
+
+      // Extract pricing data
+      const originalCurrency = doc.currency || doc.totals?.currency || currency_preference;
+      const quotedPrice = doc.quoted_price || doc.totals?.quoted_price || 0;
+      const tco = doc.tco || quotedPrice;
+      
+      // Convert to preferred currency if needed
+      let convertedTco = tco;
+      let conversionRate = 1.0;
+      let conversionNote = '';
+      
+      if (originalCurrency !== currency_preference && currency_rates[originalCurrency]) {
+        conversionRate = currency_rates[originalCurrency];
+        convertedTco = tco * conversionRate;
+        conversionNote = `Converted from ${originalCurrency} at rate ${conversionRate}`;
+      } else if (originalCurrency !== currency_preference) {
+        conversionNote = `⚠️ No conversion rate provided for ${originalCurrency}`;
+      }
+
+      // Extract lead time with source
+      const leadTime = doc.delivery_weeks || doc.terms?.delivery_weeks || doc.lead_time || null;
+      const leadTimeSource = doc.terms?.source || doc.source || '[Unknown]';
 
       return {
-        supplier: doc.supplier,
-        quoted_price: doc.quoted_price || 0,
-        tco: doc.tco || doc.quoted_price || 0,
-        currency: doc.currency || currency_preference,
-        lead_time: doc.delivery_weeks || doc.lead_time || null,
+        supplier: doc.supplier || doc.supplier_name,
+        quoted_price: quotedPrice,
+        tco: convertedTco,
+        original_tco: tco,
+        currency: currency_preference,
+        original_currency: originalCurrency,
+        conversion_rate: conversionRate,
+        conversion_note: conversionNote,
+        lead_time: leadTime,
+        lead_time_source: leadTimeSource,
         risk_score: vendorScore?.risk_score || 0,
         risk_level: getRiskLevel(vendorScore?.risk_score || 0),
         risk_factors: vendorScore?.factors || [],
-        risk_explanation: vendorScore?.explanation || '[Data Gap]',
-        what_lowers_risk: vendorScore?.what_lowers_risk || '[Data Gap]',
+        risk_weights: vendorScore?.weights || {},
+        risk_explanation: vendorScore?.explanation || '[Data Gap: No risk analysis generated]',
+        what_lowers_risk: vendorScore?.what_lowers_risk || '[Data Gap: No recommendations generated]',
         issues: vendorIssues,
         bom: vendorBom,
         source: doc.source || '[Unknown]'
@@ -153,15 +183,25 @@ serve(async (req) => {
     // Generate timestamp
     const timestamp = new Date().toISOString();
 
+    // Build currency conversion note
+    const currencyConversionSection = vendors.some((v: any) => v.conversion_note && v.original_currency !== currency_preference)
+      ? `\n### Currency Conversions\n\n${vendors
+          .filter((v: any) => v.original_currency !== currency_preference)
+          .map((v: any) => `- **${v.supplier}**: ${v.original_currency} → ${currency_preference} at rate ${v.conversion_rate.toFixed(4)} ${v.conversion_note ? `(${v.conversion_note})` : ''}`)
+          .join('\n')}\n`
+      : '';
+
     // Build Markdown report
     const markdown = `# Vendor Comparison Report
+
+${currencyConversionSection}
 
 ## 🏆 Recommended Supplier
 
 **${winner.supplier}**
 
-- **Total Cost of Ownership:** ${formatCurrency(winner.tco, winner.currency, locale)} {${winner.source}}
-- **Lead Time:** ${winner.lead_time ? `${winner.lead_time} weeks` : '[Data Gap]'}
+- **Total Cost of Ownership:** ${formatCurrency(winner.tco, winner.currency, locale)} {${winner.source}}${winner.conversion_note ? ` *(${winner.conversion_note})*` : ''}
+- **Lead Time:** ${winner.lead_time ? `${winner.lead_time} weeks {${winner.lead_time_source}}` : '[Data Gap: Lead time not specified]'}
 - **Risk Score:** ${winner.risk_score}/100 (${winner.risk_level})
 - **Savings vs. Highest:** ${formatCurrency(savings, winner.currency, locale)} (${formatPercent(savingsPercent, locale)})
 
@@ -171,43 +211,74 @@ serve(async (req) => {
 
 | Supplier | Quoted Price | TCO | Lead Time | Risk Score | Risk Level |
 |----------|-------------|-----|-----------|------------|------------|
-${vendors.map((v: any) => 
-  `| ${v.supplier} | ${formatCurrency(v.quoted_price, v.currency, locale)} | ${formatCurrency(v.tco, v.currency, locale)} | ${v.lead_time ? `${v.lead_time}w` : '[Gap]'} | ${v.risk_score}/100 | ${v.risk_level} |`
-).join('\n')}
+${vendors.map((v: any) => {
+  const tcoDisplay = v.original_currency !== currency_preference 
+    ? `${formatCurrency(v.tco, v.currency, locale)}*` 
+    : formatCurrency(v.tco, v.currency, locale);
+  const leadDisplay = v.lead_time 
+    ? `${v.lead_time}w {${v.lead_time_source}}` 
+    : '[Data Gap]';
+  return `| ${v.supplier} | ${formatCurrency(v.quoted_price, v.original_currency, locale)} | ${tcoDisplay} | ${leadDisplay} | ${v.risk_score}/100 | ${v.risk_level} |`;
+}).join('\n')}
+
+${vendors.some((v: any) => v.original_currency !== currency_preference) ? `\n*Converted to ${currency_preference}` : ''}
 
 ---
 
 ## 🎯 Risk Score Analysis
 
-${vendors.map((v: any) => `### ${v.supplier} - Risk Score: ${v.risk_score}/100 (${v.risk_level})
+${vendors.map((v: any) => {
+  const hasFactors = v.risk_factors && v.risk_factors.length > 0;
+  const totalWeight = hasFactors ? v.risk_factors.reduce((sum: number, f: any) => sum + (f.weight || 0), 0) : 0;
+  const weightedScore = hasFactors ? v.risk_factors.reduce((sum: number, f: any) => {
+    const subscore = f.subscore !== null && f.subscore !== undefined ? f.subscore : 5;
+    return sum + (f.weight || 0) * subscore;
+  }, 0) : 0;
+  
+  return `### ${v.supplier} - Risk Score: ${v.risk_score}/100 (${v.risk_level})
 
 **Analysis:** ${v.risk_explanation}
 
 **Risk Reduction:** ${v.what_lowers_risk}
 
-**Breakdown:**
-${v.risk_factors.map((f: any) => {
-  const sign = f.subscore !== null && f.subscore <= 3 ? '+' : f.subscore !== null && f.subscore >= 7 ? '−' : '•';
-  return `${sign} **${f.factor}** (weight: ${(f.weight * 100).toFixed(0)}%, score: ${f.subscore !== null ? f.subscore : 'N/A'}): ${f.evidence || '[Data Gap]'}`;
-}).join('\n')}
-`).join('\n---\n\n')}
+**Factor Breakdown:**${!hasFactors ? '\n[Data Gap: No risk factors computed]' : ''}
+${hasFactors ? v.risk_factors.map((f: any) => {
+  const subscore = f.subscore !== null && f.subscore !== undefined ? f.subscore : null;
+  const sign = subscore !== null && subscore <= 3 ? '✅' : subscore !== null && subscore >= 7 ? '⚠️' : '•';
+  const scoreDisplay = subscore !== null ? `${subscore.toFixed(1)}/10` : 'N/A';
+  const weightPct = ((f.weight || 0) * 100).toFixed(0);
+  const contribution = subscore !== null ? ((f.weight || 0) * subscore * 10).toFixed(1) : 'N/A';
+  return `${sign} **${f.factor}** (weight: ${weightPct}%, score: ${scoreDisplay}, contribution: ${contribution}/100)\n  - ${f.evidence || '[Data Gap: No evidence]'}`;
+}).join('\n') : ''}
+
+**Calculation:** Total weighted score = ${weightedScore.toFixed(1)}/10 × 10 = **${v.risk_score}/100**
+`;
+}).join('\n---\n\n')}
 
 ---
 
 ## ⚠️ Issues & Clarifications
 
+${vendors.length === 0 ? '[Data Gap: No vendor data available]' : ''}
 ${vendors.map((v: any) => {
-  if (v.issues.length === 0) {
+  if (!v.issues || v.issues.length === 0) {
     return `### ${v.supplier}\n\n✅ No critical issues identified.`;
   }
   
+  // Group issues by severity
+  const highIssues = v.issues.filter((i: any) => i.severity === 'High');
+  const mediumIssues = v.issues.filter((i: any) => i.severity === 'Medium');
+  const lowIssues = v.issues.filter((i: any) => i.severity === 'Low');
+  
   return `### ${v.supplier}
+
+**Summary:** ${highIssues.length} High | ${mediumIssues.length} Medium | ${lowIssues.length} Low
 
 ${v.issues.map((issue: any) => 
   `${getSeverityIcon(issue.severity)} **${issue.title}** (${issue.severity})
-- ${issue.detail}
-- Source: ${issue.source}
-- Suggested Question: *${issue.suggested_question}*`
+- **Detail:** ${issue.detail}
+- **Source:** ${issue.source}
+- **Suggested Question:** *"${issue.suggested_question}"*`
 ).join('\n\n')}`;
 }).join('\n\n---\n\n')}
 
@@ -215,21 +286,53 @@ ${v.issues.map((issue: any) =>
 
 ## 🔧 Technical Specifications (BOM)
 
+${vendors.length === 0 || vendors.every((v: any) => !v.bom || !v.bom.specs) ? '[Data Gap: No BOM data extracted. Run /bom first.]' : ''}
+
+${vendors.some((v: any) => v.bom && v.bom.specs) ? `
 | Supplier | Tubes | Fibers | Outer Diameter | Weight | Bend Radius | Length | Standards | Certifications |
 |----------|-------|--------|----------------|--------|-------------|--------|-----------|----------------|
 ${vendors.map((v: any) => {
   const specs = v.bom?.specs || {};
   const sources = v.bom?.sources || {};
-  return `| ${v.supplier} | ${specs.tubes || '[Gap]'}${sources.tubes ? ` {${sources.tubes}}` : ''} | ${specs.fibers || '[Gap]'}${sources.fibers ? ` {${sources.fibers}}` : ''} | ${specs.outer_diameter || '[Gap]'}${sources.outer_diameter ? ` {${sources.outer_diameter}}` : ''} | ${specs.weight || '[Gap]'}${sources.weight ? ` {${sources.weight}}` : ''} | ${specs.bend_radius || '[Gap]'}${sources.bend_radius ? ` {${sources.bend_radius}}` : ''} | ${specs.length || '[Gap]'}${sources.length ? ` {${sources.length}}` : ''} | ${specs.standards?.join(', ') || '[Gap]'}${sources.standards ? ` {${sources.standards}}` : ''} | ${specs.certifications?.join(', ') || '[Gap]'}${sources.certifications ? ` {${sources.certifications}}` : ''} |`;
-}).join('\n')}
+  
+  const tubesCell = specs.tubes !== null && specs.tubes !== undefined 
+    ? `${specs.tubes}${sources.tubes ? ` {${sources.tubes}}` : ''}` 
+    : '[Gap]';
+  const fibersCell = specs.fibers !== null && specs.fibers !== undefined 
+    ? `${specs.fibers}${sources.fibers ? ` {${sources.fibers}}` : ''}` 
+    : '[Gap]';
+  const odCell = specs.outer_diameter 
+    ? `${specs.outer_diameter}${sources.outer_diameter ? ` {${sources.outer_diameter}}` : ''}` 
+    : '[Gap]';
+  const weightCell = specs.weight 
+    ? `${specs.weight}${sources.weight ? ` {${sources.weight}}` : ''}` 
+    : '[Gap]';
+  const bendCell = specs.bend_radius 
+    ? `${specs.bend_radius}${sources.bend_radius ? ` {${sources.bend_radius}}` : ''}` 
+    : '[Gap]';
+  const lengthCell = specs.length 
+    ? `${specs.length}${sources.length ? ` {${sources.length}}` : ''}` 
+    : '[Gap]';
+  const standardsCell = specs.standards && specs.standards.length > 0 
+    ? `${specs.standards.join(', ')}${sources.standards ? ` {${sources.standards}}` : ''}` 
+    : '[Gap]';
+  const certsCell = specs.certifications && specs.certifications.length > 0 
+    ? `${specs.certifications.join(', ')}${sources.certifications ? ` {${sources.certifications}}` : ''}` 
+    : '[Gap]';
+  
+  return `| ${v.supplier} | ${tubesCell} | ${fibersCell} | ${odCell} | ${weightCell} | ${bendCell} | ${lengthCell} | ${standardsCell} | ${certsCell} |`;
+}).join('\n')}` : ''}
 
-${vendors.some((v: any) => v.bom?.conflicts) ? `
-### Conflicting Data
+${vendors.some((v: any) => v.bom?.conflicts && Object.keys(v.bom.conflicts).length > 0) ? `
+### ⚠️ Conflicting Data Detected
 
-${vendors.filter((v: any) => v.bom?.conflicts).map((v: any) => `**${v.supplier}:**
+${vendors.filter((v: any) => v.bom?.conflicts && Object.keys(v.bom.conflicts).length > 0).map((v: any) => `**${v.supplier}:**
 ${Object.entries(v.bom.conflicts).map(([field, values]: [string, any]) => 
-  `- ${field}: ${values.join(' vs ')}`
-).join('\n')}`).join('\n\n')}` : ''}
+  `- **${field}**: ${Array.isArray(values) ? values.join(' vs ') : values}`
+).join('\n')}`).join('\n\n')}
+
+*Note: Conflicting values require clarification from supplier.*
+` : ''}
 
 ---
 
