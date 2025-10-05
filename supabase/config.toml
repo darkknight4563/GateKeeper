@@ -92,3 +92,6 @@ verify_jwt = true
 
 [functions.bom]
 verify_jwt = true
+
+[functions.compose_report]
+verify_jwt = true
