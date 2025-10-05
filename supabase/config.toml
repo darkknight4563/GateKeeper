@@ -89,3 +89,6 @@ verify_jwt = true
 
 [functions.issues]
 verify_jwt = true
+
+[functions.bom]
+verify_jwt = true
