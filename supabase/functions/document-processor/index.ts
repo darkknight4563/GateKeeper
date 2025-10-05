@@ -112,177 +112,210 @@ serve(async (req) => {
       )
     }
 
-    // Parse file based on MIME type
-    let extractedText = ''
+    // Parse file based on MIME type and create structured fragments
+    const fragments: any[] = []
     const mimeType = mime_type || document.mime_type
+    const supplierHint = filename ? filename.split(/[_\-\.]/)[0] : null
     
     try {
       if (mimeType === 'application/pdf') {
-        console.log('Parsing PDF - using simple text extraction')
-        // For PDF, we'll use a simpler approach - just extract visible text
-        // In production, you'd use a proper PDF library, but for now we'll work with what we have
+        console.log('Parsing PDF - extracting text fragments')
         try {
           const textData = atob(file_content)
-          // Try to extract any readable text from the PDF
           const matches = textData.match(/[\x20-\x7E]+/g) || []
-          extractedText = matches.filter(s => s.length > 3).join('\n')
-          console.log(`Basic PDF text extraction: ${extractedText.length} chars`)
+          const pageText = matches.filter(s => s.length > 3).join('\n')
+          
+          // Split into logical fragments (pages or sections)
+          const lines = pageText.split('\n').filter(l => l.trim())
+          let currentFragment = ''
+          let pageNum = 1
+          
+          lines.forEach((line, idx) => {
+            currentFragment += line + '\n'
+            // Create fragment every ~30 lines or at natural breaks
+            if ((idx + 1) % 30 === 0 || idx === lines.length - 1) {
+              if (currentFragment.trim()) {
+                fragments.push({
+                  source: `${filename}#p${pageNum}`,
+                  text: currentFragment.trim()
+                })
+                currentFragment = ''
+                pageNum++
+              }
+            }
+          })
+          
+          console.log(`Extracted ${fragments.length} PDF fragments`)
         } catch (e) {
           console.warn('PDF parsing fallback:', e)
-          extractedText = `[PDF Document: ${filename}]\nFilename analysis: ${filename}`
+          fragments.push({
+            source: `${filename}#filename`,
+            text: `Filename: ${filename}`
+          })
         }
         
       } else if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
                  mimeType === 'application/vnd.ms-excel') {
-        console.log('Parsing Excel...')
+        console.log('Parsing Excel - extracting table fragments')
         const binaryData = Uint8Array.from(atob(file_content), c => c.charCodeAt(0))
         const workbook = XLSX.read(binaryData, { type: 'array' })
         
-        const sheets: string[] = []
         workbook.SheetNames.forEach((sheetName: string) => {
           const sheet = workbook.Sheets[sheetName]
-          const data: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false }) as any[][]
+          const jsonData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false }) as any[][]
           
-          sheets.push(`\n[Sheet: ${sheetName}]`)
-          data.forEach((row: any[], idx: number) => {
-            if (Array.isArray(row) && row.length > 0) {
-              sheets.push(`Row ${idx + 1}: ${row.join(' | ')}`)
+          if (jsonData.length > 0) {
+            // Find header row (first non-empty row)
+            const headerRowIdx = jsonData.findIndex(row => row && row.some(cell => cell))
+            if (headerRowIdx >= 0) {
+              const headers = jsonData[headerRowIdx]
+              const dataRows = jsonData.slice(headerRowIdx + 1).filter(row => row && row.some(cell => cell))
+              
+              // Create table fragment
+              fragments.push({
+                source: `${filename}#${sheetName}!A${headerRowIdx + 1}:${String.fromCharCode(65 + headers.length - 1)}${headerRowIdx + 1 + dataRows.length}`,
+                table: [headers, ...dataRows]
+              })
             }
-          })
+          }
         })
-        extractedText = sheets.join('\n')
-        console.log(`Extracted ${workbook.SheetNames.length} sheets from Excel`)
+        
+        console.log(`Extracted ${fragments.length} Excel table fragments`)
         
       } else if (mimeType === 'text/csv') {
-        console.log('Parsing CSV...')
-        extractedText = atob(file_content)
-        console.log(`Extracted CSV content`)
+        console.log('Parsing CSV - extracting table fragment')
+        const csvText = atob(file_content)
+        const lines = csvText.split('\n').filter(l => l.trim())
+        
+        if (lines.length > 0) {
+          const table = lines.map(line => line.split(',').map(cell => cell.trim()))
+          fragments.push({
+            source: `${filename}#rows1-${lines.length}`,
+            table
+          })
+        }
+        
+        console.log(`Extracted CSV with ${lines.length} rows`)
         
       } else {
-        // Fallback for unknown types
-        console.warn(`Unsupported MIME type: ${mimeType}, attempting text extraction`)
+        console.warn(`Unsupported MIME type: ${mimeType}`)
         try {
-          extractedText = atob(file_content)
+          const text = atob(file_content)
+          fragments.push({
+            source: `${filename}#full`,
+            text: text.substring(0, 2000) // Limit to 2000 chars
+          })
         } catch (e) {
-          extractedText = `[Document: ${filename}]\nUnsupported type: ${mimeType}`
+          fragments.push({
+            source: `${filename}#filename`,
+            text: `Filename: ${filename}, Type: ${mimeType}`
+          })
         }
       }
     } catch (parseError) {
       console.error('File parsing error:', parseError)
-      // Don't fail completely - try to extract filename info at least
-      extractedText = `[Error parsing file: ${filename}]\nFilename: ${filename}\nType: ${mimeType}\nAttempting to extract vendor from filename...`
+      fragments.push({
+        source: `${filename}#error`,
+        text: `Error parsing file. Filename: ${filename}, Type: ${mimeType}`
+      })
     }
     
-    if (!extractedText || extractedText.length < 10) {
-      console.warn('No text extracted, using filename fallback')
-      extractedText = `Document: ${filename || document.filename}\nVendor information should be in the filename.`
+    if (fragments.length === 0) {
+      console.warn('No fragments extracted, using filename')
+      fragments.push({
+        source: `${filename || document.filename}#filename`,
+        text: `Filename: ${filename || document.filename}`
+      })
     }
     
-    console.log(`Extracted text length: ${extractedText.length} characters`)
+    console.log(`Total fragments: ${fragments.length}`)
+    
+    // Assemble structured payload
+    const payload = {
+      doc_meta: {
+        supplier_hint: supplierHint,
+        mime: mimeType,
+        filename: filename || document.filename
+      },
+      fragments
+    }
 
-    // Call Lovable AI to extract structured vendor offer data with multilingual support
-    const extractionPrompt = `You are an expert document parser for procurement documents with MANDATORY source citation.
+    // Call Lovable AI with structured fragments and strict extraction rules
+    const extractionPrompt = `You are an expert procurement document parser. Extract ONLY data present in the provided fragments.
 
-CRITICAL EXTRACTION REQUIREMENTS:
+CRITICAL RULES:
+1. **NO HALLUCINATION**: Only extract fields that are explicitly present in fragments
+2. **MANDATORY SOURCE**: Every numeric value MUST include its source pointer
+3. **DATA GAPS**: If a field is missing, set to null and add a note in validation_notes
+4. **SUPPLIER HINT**: Use doc_meta.supplier_hint as a starting point for vendor name
 
-1. **PRICING EXTRACTION** (Norwegian/English documents):
-   - Extract from "Tilbutt enhetspris" (Offered unit price) or "Kostnad" (Cost) columns
-   - Main product in "Hovedprodukt" section
-   - Optional items in "Opsjon: vare/produkt/utstyr/kurs" section
-   - Service levels in "Opsjon: servicenivå"
-   - Sum all costs for total quoted price
+STRUCTURED PAYLOAD:
+${JSON.stringify(payload, null, 2)}
 
-2. **DELIVERY & WARRANTY** (REQUIRED for risk analysis):
-   - Extract delivery time/lead time in WEEKS (convert months/days to weeks)
-   - Extract warranty period in MONTHS (convert years/weeks to months)
-   - Look for: "Leveringstid", "Lead time", "Delivery", "Garanti", "Warranty"
-   - Source: Cite page/section where found
-
-3. **CERTIFICATIONS** (REQUIRED for compliance):
-   - Extract ALL certifications mentioned: ISO 9001, ISO 13485, DNV-GL, API 17E, DNV-ST-F119
-   - Look in: Product descriptions, company info, compliance sections
-   - Return as array: ["ISO 9001", "DNV-GL", "API 17E"]
-
-4. **TECHNICAL SPECIFICATIONS** (REQUIRED for BOM):
-   - tubes: Number of tubes/cores (look for "tubes", "rør", "cores")
-   - fibers: Number of fibers per tube (look for "fibers", "fiber")
-   - outer_diameter: Outside diameter with unit (e.g., "1/2 inch", "12.7mm")
-   - weight: Weight with unit (e.g., "50 kg/km", "125 lb/ft")
-   - bend_radius: Minimum bend radius with unit (e.g., "0.5m", "20 inches")
-   - length: Cable/product length with unit (e.g., "5000m", "3.28 ft")
-   - standards: Array of standards (e.g., ["DNV-ST-F119", "API 17E", "ISO 9001"])
-
-5. **PAYMENT TERMS** (REQUIRED for contract analysis):
-   - Extract payment terms: "Net 30", "50/50", "Payment on delivery"
-   - Extract quote validity: Days valid (e.g., 30, 60, 90)
-
-6. **SOURCE CITATIONS** (MANDATORY):
-   - PDF: "pdf#p3" (page 3)
-   - XLSX: "xlsx#Sheet1!B5" (Sheet1, cell B5)
-   - DOCX: "docx#p2" (page 2)
-   - Cite EVERY numeric value and critical field
-
-JSON Schema (COMPLETE ALL FIELDS):
+EXTRACTION SCHEMA:
 {
-  "language_detected": "no" or "en",
-  "supplier": "Philips" | "Siemens" | "GE" | "exact vendor name",
-  "document_type": "offer" | "quote" | "RFQ",
-  "date": "document date or null",
-  "currency": "NOK" | "USD" | "EUR" (from header),
+  "language_detected": "no" | "en" | "unknown",
+  "supplier": "exact vendor name from fragments or supplier_hint",
+  "document_type": "offer" | "quote" | "RFQ" | null,
+  "date": "YYYY-MM-DD or null",
+  "currency": "NOK" | "USD" | "EUR" | null,
   "items": [
     {
       "name": "product name in English",
-      "name_original": "original Norwegian/native name",
-      "part_number": "article/part number",
-      "qty": numeric quantity,
-      "unit": "per stykk, per år, per time, etc.",
-      "price": NUMERIC price from document,
-      "delivery": "delivery time as string (e.g., '4-6 weeks')",
-      "warranty": "warranty period as string (e.g., '24 months')",
-      "source": "pdf#p2" or similar
+      "name_original": "original language name",
+      "part_number": "part/article number or null",
+      "qty": numeric or null,
+      "unit": "stk | år | time | m | etc. or null",
+      "price": numeric or null,
+      "delivery": "delivery time string or null",
+      "warranty": "warranty period string or null",
+      "source": "fragment source pointer (REQUIRED for price, delivery, warranty)"
     }
   ],
   "terms": {
-    "payment": "payment terms text (e.g., 'Net 30 days')",
-    "penalties": "late delivery penalties if any",
-    "validity": "quote validity text (e.g., '60 days')",
-    "location": "production country (USA, Kina, Danmark, Norge)",
-    "contact": "contact info if available",
-    "delivery_weeks": NUMERIC weeks (convert from months/days if needed),
-    "warranty_months": NUMERIC months (convert from years/weeks if needed),
-    "source": "pdf#p3" or location where terms found
+    "payment": "payment terms or null",
+    "penalties": "penalties or null",
+    "validity": "quote validity or null",
+    "location": "production country or null",
+    "contact": "contact info or null",
+    "delivery_weeks": numeric weeks or null,
+    "warranty_months": numeric months or null,
+    "source": "fragment source or null"
   },
   "technical_specs": {
-    "tubes": numeric count or null,
-    "fibers": numeric count or null,
-    "outer_diameter": "value with unit" or null,
-    "weight": "value with unit" or null,
-    "bend_radius": "value with unit" or null,
-    "length": "value with unit" or null,
-    "standards": ["DNV-ST-F119", "API 17E", ...] or [],
-    "certifications": ["ISO 9001", "DNV-GL", ...] or [],
-    "source": "pdf#p4" or where specs found
+    "tubes": numeric or null,
+    "fibers": numeric or null,
+    "outer_diameter": "value with unit or null",
+    "weight": "value with unit or null",
+    "bend_radius": "value with unit or null",
+    "length": "value with unit or null",
+    "standards": ["standard1", ...] or [],
+    "certifications": ["cert1", ...] or [],
+    "source": "fragment source or null"
   },
-  "certifications": ["ISO 9001", "ISO 13485", "DNV-GL", "API 17E"] or []
+  "certifications": ["ISO 9001", ...] or [],
+  "validation_notes": [
+    "[Data Gap] Delivery time not found in fragments",
+    "[Data Gap] Warranty not specified",
+    ...
+  ]
 }
 
-CONVERSION RULES:
+CONVERSION RULES (only if data is present):
 - Delivery: "3 months" → 12-13 weeks, "45 days" → 6-7 weeks
 - Warranty: "2 years" → 24 months, "52 weeks" → 12 months
-- Always preserve original units in technical specs (don't convert 1/2" to mm)
 
-EXAMPLES:
-✅ CORRECT: "delivery_weeks": 8, "source": "pdf#p2"
-✅ CORRECT: "warranty_months": 24, "source": "pdf#p3"
-✅ CORRECT: "certifications": ["ISO 9001", "DNV-GL"]
-✅ CORRECT: "outer_diameter": "1/2 inch", "source": "pdf#p5"
-❌ WRONG: "delivery_weeks": null (extract it!)
-❌ WRONG: No source citations
+EXAMPLES OF CORRECT EXTRACTION:
+✅ "price": 15000, "source": "Philips.xlsx#Sheet1!D5"
+✅ "delivery_weeks": 34, "source": "offer.pdf#p2"
+✅ "validation_notes": ["[Data Gap] Certifications not mentioned"]
+✅ "warranty_months": null (when not found in fragments)
 
-Document content (extracted from ${filename || document.filename}):
-${extractedText}
+❌ WRONG: Making up delivery times not in fragments
+❌ WRONG: Assuming certifications without evidence
+❌ WRONG: Missing source pointers on numeric values
 
-Return ONLY valid JSON with ALL fields populated.`
+Return ONLY valid JSON matching the schema.`
 
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
