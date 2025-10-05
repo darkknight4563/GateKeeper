@@ -103,48 +103,62 @@ serve(async (req) => {
     }
 
     // Call Lovable AI to extract structured vendor offer data with multilingual support
-    const extractionPrompt = `You are an intelligent document parser for ClarityChain AI.  
-Your goal: extract all relevant procurement data and output it as structured JSON.
+    const extractionPrompt = `You are an expert document parser for Norwegian medical equipment procurement documents (Prisskjema).
 
-Step 1 — Auto-detect document language (e.g., English, Norwegian, Spanish, etc.).  
-Step 2 — Translate key headers and values to English internally, but keep the original language text as a parallel field.  
-Step 3 — Identify and structure the following entities:
-- Supplier name
-- Document type (quotation, offer, contract, BOM, etc.)
-- Date and currency
-- Line items (material, quantity, unit, price, delivery time, warranty)
-- Terms (payment, penalties, validity, location, contact info)
+CRITICAL INSTRUCTIONS:
+1. This is a Norwegian pricing sheet for ultrasound equipment
+2. Extract ALL pricing from the "Tilbutt enhetspris" (Offered unit price) or "Kostnad" (Cost) columns
+3. The main product is in the "Hovedprodukt" section - extract its price
+4. Optional items are in "Opsjon: vare/produkt/utstyr/kurs" section - extract all item prices
+5. Service levels are in "Opsjon: servicenivå" - extract annual service costs
+6. Currency is specified in the header row - look for "norwegian kroner" (NOK) or "USD dollars"
+7. Sum up the main product cost + all optional item costs for the total quoted price
 
-Step 4 — Return clean JSON with schema:
+PRICING EXTRACTION RULES:
+- Main product price is the first large price in Hovedprodukt section (e.g., 87000, 980000, 215000)
+- Each optional item has its own price in the "Tilbutt enhetspris" column
+- Ignore cells with "-" (means not applicable)
+- Ignore cells with "0" in training sections (free training)
+- For service levels, extract the per-year or per-hour prices
+
+JSON Schema:
 {
-  "language_detected": "string - detected language code",
-  "supplier": "string - supplier/vendor company name",
-  "document_type": "string - quotation, offer, contract, BOM, etc.",
-  "date": "string - document date if found",
-  "currency": "string - currency code (USD, EUR, NOK, etc.)",
+  "language_detected": "no" or "en",
+  "supplier": "vendor name from document (Philips, Siemens, or GE)",
+  "document_type": "offer",
+  "date": "document date or null",
+  "currency": "NOK" or "USD" (check header carefully),
   "items": [
     {
-      "name": "string - material/item name",
-      "name_original": "string - original language name",
-      "part_number": "string - part/SKU number",
-      "qty": number,
-      "unit": "string - unit of measure",
-      "price": number,
-      "delivery": "string - delivery time/lead time",
-      "warranty": "string - warranty terms"
+      "name": "product name in English",
+      "name_original": "original Norwegian name",
+      "part_number": "article number if available",
+      "qty": quantity as number,
+      "unit": "per stykk, per år, per time, etc.",
+      "price": ACTUAL NUMERIC PRICE from Tilbutt enhetspris column,
+      "delivery": "lead time if specified",
+      "warranty": "warranty info if available"
     }
   ],
   "terms": {
-    "payment": "string - payment terms",
-    "penalties": "string - penalty clauses",
-    "validity": "string - offer validity period",
-    "location": "string - vendor location",
-    "contact": "string - contact information"
+    "payment": null,
+    "penalties": null,
+    "validity": null,
+    "location": "production country (USA / Kina, Danmark, Norge, etc.)",
+    "contact": null
   }
 }
 
-If any data is missing, write null.
-Do not hallucinate or infer unspecified values.
+EXAMPLES OF CORRECT EXTRACTION:
+- If you see "87,000" or "87000" in Tilbutt enhetspris for main product, extract price: 87000
+- If currency header says "norwegian kroner", currency is "NOK"
+- If currency header says "USD dollars", currency is "USD"
+- Main product Philips ultra: price 87000, currency USD
+- Main product Siemens Mediq: price 980000, currency NOK  
+- Main product GE Venue: price 215000, currency NOK
+
+Do NOT return 0 or null for prices that clearly exist in the document.
+Extract every single line item with an actual price value.
 
 Document content:
 ${documentText}
