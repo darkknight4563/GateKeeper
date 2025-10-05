@@ -1,5 +1,8 @@
 project_id = "***REMOVED***"
 
+[functions.comparison-layout]
+verify_jwt = true
+
 [functions.export-report]
 verify_jwt = true
 
