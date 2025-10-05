@@ -60,31 +60,31 @@ class DocumentAPI {
   private async getAuthHeaders() {
     const { data: { session } } = await supabase.auth.getSession();
     
-    if (!session?.access_token) {
-      throw new Error('User not authenticated');
-    }
-
-    return {
-      'Authorization': `Bearer ${session.access_token}`,
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json'
     };
+
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+
+    return headers;
   }
 
   async uploadDocument(file: File): Promise<DocumentUploadResponse> {
     const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session?.access_token) {
-      throw new Error('User not authenticated');
-    }
 
     const formData = new FormData();
     formData.append('file', file);
 
+    const headers: Record<string, string> = {};
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+
     const response = await fetch(`${this.baseUrl}/upload-document`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`
-      },
+      headers,
       body: formData,
     });
 

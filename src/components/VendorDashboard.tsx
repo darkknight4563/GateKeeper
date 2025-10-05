@@ -23,23 +23,55 @@ const VendorDashboard: React.FC = () => {
   };
 
   const handleProcessDocuments = async () => {
-    setIsProcessing(true);
+    if (!uploadedFiles || uploadedFiles.length === 0) {
+      toast.info('Please upload one or more files first');
+      return;
+    }
 
+    setIsProcessing(true);
     try {
-      toast.info('Processing vendor offers...');
-      
-      // Simulate processing delay for realism
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Load mock data from real vendor offers
-      const mockResults = getMockProcessingResults();
-      
-      setVendorResults(mockResults.results);
-      toast.success(`Successfully processed ${mockResults.results.length} vendor offers`);
-      
+      // 1) Upload all files
+      const uploads = await Promise.all(
+        uploadedFiles.map(async (item: any) => {
+          const file: File = item?.file ?? item; // tolerate different shapes
+          return documentApi.uploadDocument(file);
+        })
+      );
+
+      // 2) Start processing for each uploaded document
+      const jobs = await Promise.all(
+        uploads.map((u) => documentApi.processDocument(u.id))
+      );
+
+      // 3) Poll all jobs until completion and merge results
+      const results = await Promise.all(
+        jobs.map((j) => documentApi.pollJobStatus(j.job_id))
+      );
+
+      const mergedVendors = results.flatMap((r) => r.results || []);
+      setVendorResults(mergedVendors);
+      setSelectedVendor(null);
+
+      toast.success(`Successfully processed ${uploads.length} document${uploads.length > 1 ? 's' : ''}`);
     } catch (error) {
       console.error('Processing error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to process documents');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Keep demo data loader as a separate action so it doesn't interfere with real processing
+  const handleLoadDemoData = async () => {
+    setIsProcessing(true);
+    try {
+      const mockResults = getMockProcessingResults();
+      setVendorResults(mockResults.results);
+      setSelectedVendor(null);
+      toast.success(`Loaded ${mockResults.results.length} demo vendor offers`);
+    } catch (error) {
+      console.error('Demo data load error:', error);
+      toast.error('Failed to load demo data');
     } finally {
       setIsProcessing(false);
     }
@@ -351,7 +383,7 @@ const VendorDashboard: React.FC = () => {
               )}
               
               <Button 
-                onClick={handleProcessDocuments}
+                onClick={handleLoadDemoData}
                 className="w-full"
                 size="lg"
                 disabled={isProcessing}
