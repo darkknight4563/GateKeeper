@@ -64,7 +64,11 @@ serve(async (req) => {
         )
       }
 
-      // Store file metadata in database
+      // Read file content as text/base64 depending on type
+      const arrayBuffer = await file.arrayBuffer()
+      const fileContent = new TextDecoder().decode(arrayBuffer)
+
+      // Store file metadata AND content in database
       const { data: document, error: dbError } = await supabase
         .from('documents')
         .insert({
@@ -86,14 +90,15 @@ serve(async (req) => {
         )
       }
 
-      // Create processing job
+      // Create processing job with file content
       const { data: job, error: jobError } = await supabase
         .from('processing_jobs')
         .insert({
           document_id: document.id,
           job_status: 'queued',
           job_type: 'document_analysis',
-          progress: 0
+          progress: 0,
+          result_data: { file_content: fileContent } // Store file content for processing
         })
         .select()
         .single()
@@ -108,7 +113,8 @@ serve(async (req) => {
           filename: document.filename,
           status: document.upload_status,
           job_id: job?.id || null,
-          message: 'Document uploaded successfully'
+          message: 'Document uploaded successfully',
+          file_content_length: fileContent.length
         }),
         {
           status: 200,
