@@ -150,6 +150,36 @@ ${JSON.stringify(comparisonData, null, 2)}`
   }
 });
 
+// Helpers to derive missing sections from extracted_data on older jobs
+function deriveSpecsFromItems(items: any[] | undefined) {
+  const specs: any = {};
+  if (!Array.isArray(items)) return specs;
+  for (const raw of items) {
+    const name = String(raw?.name || raw?.name_original || raw?.description || '').toLowerCase();
+    if (!specs.tubes && (name.includes('tube') || name.includes('rør'))) specs.tubes = raw?.part_number || raw?.description || '';
+    if (!specs.fibers && name.includes('fiber')) specs.fibers = raw?.part_number || raw?.description || '';
+    if (!specs.outerDiameter && (name.includes('outer diameter') || name.includes('diameter') || name.includes('od'))) specs.outerDiameter = raw?.description || '';
+    if (!specs.weight && (name.includes('weight') || name.includes('vekt'))) specs.weight = raw?.description || '';
+    if (!specs.bendRadius && (name.includes('bend') || name.includes('bøy'))) specs.bendRadius = raw?.description || '';
+    if (!specs.length && (name.includes('length') || name.includes('lengde'))) specs.length = raw?.description || '';
+    if (!specs.specification && (name.includes('spec') || name.includes('standard'))) specs.specification = raw?.description || '';
+    if (!specs.certification && name.includes('iso')) specs.certification = raw?.description || 'ISO';
+  }
+  return specs;
+}
+
+function deriveIssuesFromData(extractedData: any) {
+  const issues: string[] = [];
+  const items = Array.isArray(extractedData?.items) ? extractedData.items : [];
+  const hasWarranty = !!extractedData?.terms?.warranty || items.some((i: any) => i?.warranty);
+  if (!hasWarranty) issues.push('Warranty information not specified');
+  const hasDelivery = !!extractedData?.terms?.delivery || items.some((i: any) => i?.delivery);
+  if (!hasDelivery) issues.push('Delivery terms unclear');
+  const hasISO = items.some((i: any) => String(i?.name || i?.name_original || '').toLowerCase().includes('iso'));
+  if (!hasISO) issues.push('ISO certification not mentioned');
+  return issues;
+}
+
 function generateHTMLReport(job: any, vendors: any[], recommendation: string): string {
   const bestVendor = vendors.reduce((best, current) => {
     const currentTCO = current.tco_calculations?.[0]?.calculated_tco || current.quoted_price;
@@ -200,7 +230,12 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
   const riskAnalysis = vendors.map(v => {
     const risk = v.risk_assessments?.[0];
     const riskScore = risk?.risk_score || 0;
-    const riskFactors = Array.isArray(risk?.risk_factors) ? risk.risk_factors : [];
+    let riskFactors: string[] = Array.isArray(risk?.risk_factors) ? risk.risk_factors : [];
+    if (riskFactors.length === 0) {
+      const extracted = v.extracted_data || {};
+      const derived = deriveIssuesFromData(extracted);
+      riskFactors = Array.isArray(extracted.issues) && extracted.issues.length > 0 ? extracted.issues : derived;
+    }
     
     return `
       <div style="margin-bottom: 15px;">
@@ -217,7 +252,9 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
   // Issues & Clarifications section
   const issuesAndClarifications = vendors.map(v => {
     const extractedData = v.extracted_data || {};
-    const issues = extractedData.issues || [];
+    const issues = (Array.isArray(extractedData.issues) && extractedData.issues.length > 0)
+      ? extractedData.issues
+      : deriveIssuesFromData(extractedData);
     
     if (issues.length === 0) return '';
     
@@ -249,7 +286,9 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
       </thead>
       <tbody>
         ${vendors.map(v => {
-          const specs = v.extracted_data?.technical_specs || {};
+          const extracted = v.extracted_data || {};
+          const hasTech = extracted.technical_specs && Object.keys(extracted.technical_specs || {}).length > 0;
+          const specs = hasTech ? extracted.technical_specs : deriveSpecsFromItems(extracted.items);
           return `
             <tr>
               <td style="padding: 12px; border: 1px solid #e5e7eb;">${v.vendor_name}</td>
