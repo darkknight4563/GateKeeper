@@ -172,11 +172,11 @@ function deriveIssuesFromData(extractedData: any) {
   const issues: string[] = [];
   const items = Array.isArray(extractedData?.items) ? extractedData.items : [];
   const hasWarranty = !!extractedData?.terms?.warranty || items.some((i: any) => i?.warranty);
-  if (!hasWarranty) issues.push('Warranty information not specified');
+  if (!hasWarranty) issues.push('[Data Gap] Warranty evidence not found');
   const hasDelivery = !!extractedData?.terms?.delivery || items.some((i: any) => i?.delivery);
-  if (!hasDelivery) issues.push('Delivery terms unclear');
+  if (!hasDelivery) issues.push('[Data Gap] Delivery terms evidence not found');
   const hasISO = items.some((i: any) => String(i?.name || i?.name_original || '').toLowerCase().includes('iso'));
-  if (!hasISO) issues.push('Missing ISO 9001 certification');
+  if (!hasISO) issues.push('[Data Gap] ISO 9001 certification evidence not found');
   return issues;
 }
 
@@ -304,14 +304,14 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
           return `
             <tr>
               <td style="padding: 12px; border: 1px solid #e5e7eb;">${v.vendor_name}</td>
-              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.tubes || 'N/A'}</td>
-              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.fibers || 'N/A'}</td>
-              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.outerDiameter || 'N/A'}</td>
-              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.weight || 'Not specified'}</td>
-              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.bendRadius || 'N/A'}</td>
-              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.length || 'N/A'}</td>
-              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.specification || 'N/A'}</td>
-              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.certification || 'N/A'}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.tubes || '[Data Gap] Tubes not provided'}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.fibers || '[Data Gap] Fibers not provided'}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.outerDiameter || '[Data Gap] Outer diameter not provided'}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.weight || '[Data Gap] Weight not provided'}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.bendRadius || '[Data Gap] Bend radius not provided'}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.length || '[Data Gap] Length not provided'}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.specification || '[Data Gap] Specification not provided'}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.certification || '[Data Gap] Certification not provided'}</td>
             </tr>
           `;
         }).join('')}
@@ -366,6 +366,42 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
       </div>
     `;
   }).join('');
+
+  const machineData = {
+    job_id: job.id,
+    document_id: job.document_id,
+    recommendation,
+    stats: {
+      total_vendors: vendors.length,
+      avg_tco: avgTCO,
+      high_risk_count: highRiskCount,
+      best_vendor_id: bestVendor.id,
+      best_tco: bestTCO,
+      worst_vendor_id: worstVendor.id,
+      worst_tco: worstTCO,
+      savings
+    },
+    vendors: vendors.map(v => {
+      const tco = v.tco_calculations?.[0]?.calculated_tco || v.quoted_price;
+      const riskScore = v.risk_assessments?.[0]?.risk_score || 0;
+      const leadTime = v.lead_time_analysis?.[0]?.estimated_lead_time || 0;
+      const extracted = v.extracted_data || {};
+      const hasTech = extracted.technical_specs && Object.keys(extracted.technical_specs || {}).length > 0;
+      const specs = hasTech ? extracted.technical_specs : deriveSpecsFromItems(extracted.items);
+      const issues = (Array.isArray(extracted.issues) && extracted.issues.length > 0) ? extracted.issues : deriveIssuesFromData(extracted);
+      return {
+        id: v.id,
+        name: v.vendor_name,
+        currency: v.currency,
+        quoted_price: v.quoted_price,
+        tco,
+        lead_time: leadTime,
+        risk_score: riskScore,
+        issues,
+        technical_specs: specs
+      };
+    })
+  };
 
   return `
 <!DOCTYPE html>
@@ -447,6 +483,13 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
     </tbody>
   </table>
 
+  <div class="recommendation-box">
+    <h2>Recommendation</h2>
+    <div>
+      ${recommendation || '<p>[Data Gap] Recommendation not generated</p>'}
+    </div>
+  </div>
+
   <h2>Summary Statistics:</h2>
   <div style="background-color: #f9fafb; padding: 15px; border-radius: 8px; margin: 20px 0;">
     <p style="margin: 5px 0;"><strong>Total Vendors Analyzed:</strong> ${vendors.length}</p>
@@ -465,6 +508,9 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
   <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 0.85em;">
     <p>Generated on ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'numeric', year: 'numeric' })}, ${new Date().toLocaleTimeString('en-GB')}</p>
   </div>
+
+  <h2>Machine-readable JSON</h2>
+  <pre><code class="language-json">${JSON.stringify(machineData, null, 2)}</code></pre>
 </body>
 </html>
   `;
