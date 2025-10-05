@@ -337,11 +337,25 @@ const VendorDashboard: React.FC = () => {
                 maxFileSize={50 * 1024 * 1024} // 50MB
               />
               
+              {uploadedFiles.length > 0 && (
+                <Button 
+                  onClick={handleProcessDocuments}
+                  className="w-full"
+                  size="lg"
+                  disabled={isProcessing}
+                  variant="default"
+                >
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  {isProcessing ? 'Processing...' : `Process ${uploadedFiles.length} Document${uploadedFiles.length > 1 ? 's' : ''}`}
+                </Button>
+              )}
+              
               <Button 
                 onClick={handleProcessDocuments}
                 className="w-full"
                 size="lg"
                 disabled={isProcessing}
+                variant="outline"
               >
                 <BarChart3 className="h-4 w-4 mr-2" />
                 {isProcessing ? 'Processing...' : 'Load Demo Data (Aker, Technip, OneSubsea)'}
