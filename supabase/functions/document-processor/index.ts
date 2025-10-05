@@ -71,33 +71,54 @@ serve(async (req) => {
       documentText = `Document content for ${document.filename}`
     }
 
-    // Call Lovable AI to extract structured vendor offer data
-    const extractionPrompt = `You are a procurement data extraction expert. Analyze this vendor offer document and extract the following information in JSON format:
+    // Call Lovable AI to extract structured vendor offer data with multilingual support
+    const extractionPrompt = `You are an intelligent document parser for ClarityChain AI.  
+Your goal: extract all relevant procurement data and output it as structured JSON.
 
+Step 1 — Auto-detect document language (e.g., English, Norwegian, Spanish, etc.).  
+Step 2 — Translate key headers and values to English internally, but keep the original language text as a parallel field.  
+Step 3 — Identify and structure the following entities:
+- Supplier name
+- Document type (quotation, offer, contract, BOM, etc.)
+- Date and currency
+- Line items (material, quantity, unit, price, delivery time, warranty)
+- Terms (payment, penalties, validity, location, contact info)
+
+Step 4 — Return clean JSON with schema:
 {
-  "vendor_name": "string - the supplier/vendor company name",
-  "quoted_price": number - total quoted price/amount,
-  "currency": "string - currency code (USD, EUR, etc.)",
+  "language_detected": "string - detected language code",
+  "supplier": "string - supplier/vendor company name",
+  "document_type": "string - quotation, offer, contract, BOM, etc.",
+  "date": "string - document date if found",
+  "currency": "string - currency code (USD, EUR, NOK, etc.)",
   "items": [
     {
-      "part_number": "string",
-      "description": "string", 
-      "quantity": number,
-      "unit_price": number,
-      "total_price": number
+      "name": "string - material/item name",
+      "name_original": "string - original language name",
+      "part_number": "string - part/SKU number",
+      "qty": number,
+      "unit": "string - unit of measure",
+      "price": number,
+      "delivery": "string - delivery time/lead time",
+      "warranty": "string - warranty terms"
     }
   ],
-  "quoted_lead_time": number - delivery lead time in days,
-  "certifications": ["string array - any mentioned certifications like ISO 9001, AS9100"],
-  "delivery_terms": "string - delivery terms if mentioned",
-  "payment_terms": "string - payment terms if mentioned",
-  "location": "string - vendor location/country"
+  "terms": {
+    "payment": "string - payment terms",
+    "penalties": "string - penalty clauses",
+    "validity": "string - offer validity period",
+    "location": "string - vendor location",
+    "contact": "string - contact information"
+  }
 }
+
+If any data is missing, write null.
+Do not hallucinate or infer unspecified values.
 
 Document content:
 ${documentText}
 
-Extract all available information. If a field is not found, use reasonable defaults or null. Return ONLY valid JSON.`
+Return ONLY valid JSON.`
 
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -145,22 +166,37 @@ Extract all available information. If a field is not found, use reasonable defau
     }
 
     // Validate and normalize the extracted data
+    const items = Array.isArray(extractedData.items) ? extractedData.items : []
+    const totalPrice = items.reduce((sum: number, item: any) => sum + (Number(item.price) || 0) * (Number(item.qty) || 0), 0)
+    
     const vendorData = {
-      vendor_name: extractedData.vendor_name || 'Unknown Vendor',
-      quoted_price: Number(extractedData.quoted_price) || 0,
+      language_detected: extractedData.language_detected || 'unknown',
+      vendor_name: extractedData.supplier || 'Unknown Vendor',
+      document_type: extractedData.document_type || 'unknown',
+      date: extractedData.date || null,
+      quoted_price: totalPrice || 0,
       currency: extractedData.currency || 'USD',
-      items_count: Array.isArray(extractedData.items) ? extractedData.items.length : 0,
-      quoted_lead_time: Number(extractedData.quoted_lead_time) || 30,
-      certifications: Array.isArray(extractedData.certifications) ? extractedData.certifications : [],
-      delivery_terms: extractedData.delivery_terms || null,
-      payment_terms: extractedData.payment_terms || null,
-      location: extractedData.location || 'Unknown',
-      items: extractedData.items || [],
+      items_count: items.length,
+      quoted_lead_time: items.length > 0 ? parseInt(items[0].delivery || '30') || 30 : 30,
+      certifications: [],
+      delivery_terms: extractedData.terms?.delivery || null,
+      payment_terms: extractedData.terms?.payment || null,
+      location: extractedData.terms?.location || 'Unknown',
+      items: items.map((item: any) => ({
+        part_number: item.part_number || null,
+        description: item.name || item.name_original || 'Unknown Item',
+        description_original: item.name_original || item.name || null,
+        quantity: Number(item.qty) || 0,
+        unit: item.unit || 'pcs',
+        unit_price: Number(item.price) || 0,
+        total_price: (Number(item.price) || 0) * (Number(item.qty) || 0),
+        delivery_time: item.delivery || null,
+        warranty: item.warranty || null
+      })),
+      terms: extractedData.terms || {},
       delivery_history: 'unknown',
-      quoted_total: Number(extractedData.quoted_price) || 0,
-      line_item_total: Array.isArray(extractedData.items) 
-        ? extractedData.items.reduce((sum: number, item: any) => sum + (Number(item.total_price) || 0), 0)
-        : 0
+      quoted_total: totalPrice || 0,
+      line_item_total: totalPrice || 0
     }
 
     console.log('Processed vendor data:', vendorData)
