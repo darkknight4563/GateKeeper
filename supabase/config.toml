@@ -80,3 +80,6 @@ verify_jwt = true
 
 [functions.ingest-guard]
 verify_jwt = true
+
+[functions.extract]
+verify_jwt = true
