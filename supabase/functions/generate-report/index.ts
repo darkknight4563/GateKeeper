@@ -82,6 +82,35 @@ serve(async (req) => {
       });
     }
 
+    // CRITICAL VALIDATION: Block if extraction returned no usable fields
+    const emptyVendors = vendors.filter(v => {
+      const hasDelivery = v.extracted_data?.terms?.delivery_weeks || v.extracted_data?.delivery_weeks;
+      const hasWarranty = v.extracted_data?.terms?.warranty_months || v.extracted_data?.warranty_months;
+      const hasLineItems = Array.isArray(v.extracted_data?.line_items) && v.extracted_data.line_items.length > 0;
+      const hasItems = Array.isArray(v.extracted_data?.items) && v.extracted_data.items.length > 0;
+      
+      return !hasDelivery && !hasWarranty && !hasLineItems && !hasItems;
+    });
+
+    if (emptyVendors.length === vendors.length) {
+      const diagnosticDetails = vendors.map(v => {
+        const items = v.extracted_data?.items?.length || v.extracted_data?.line_items?.length || 0;
+        return `  - ${v.vendor_name}: Items=${items}, extracted_data keys=${Object.keys(v.extracted_data || {}).join(', ')}`;
+      }).join('\n');
+
+      console.error('DIAGNOSTIC: extraction returned no usable fields; blocking report generation');
+      return new Response(JSON.stringify({
+        diagnostic: true,
+        blocked_reason: 'extraction_returned_no_usable_fields',
+        message: `DIAGNOSTIC: extraction returned no usable fields; blocking report generation.`,
+        details: `ALL vendors missing critical data:\n${diagnosticDetails}`,
+        hint: `The extraction pipeline failed. Check /document-processor and /process-document logs. Re-upload documents or verify file content is not empty.`
+      }), {
+        status: 422,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Prepare data for AI recommendation with full vendor details
     const comparisonData = vendors.map(v => ({
       vendor: v.vendor_name,

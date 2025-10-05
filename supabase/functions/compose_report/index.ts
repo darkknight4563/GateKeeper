@@ -116,6 +116,36 @@ serve(async (req) => {
       });
     }
 
+    // CRITICAL VALIDATION: Block if extraction returned no usable fields
+    const emptyDocuments = documents.filter((doc: any) => {
+      const hasDelivery = doc.delivery_weeks || doc.terms?.delivery_weeks || doc.lead_time;
+      const hasWarranty = doc.warranty_months || doc.terms?.warranty_months;
+      const hasLineItems = Array.isArray(doc.line_items) && doc.line_items.length > 0;
+      const hasItems = Array.isArray(doc.items) && doc.items.length > 0;
+      
+      return !hasDelivery && !hasWarranty && !hasLineItems && !hasItems;
+    });
+
+    if (emptyDocuments.length === documents.length) {
+      const diagnosticDetails = documents.map((doc: any) => {
+        const supplier = doc.supplier || doc.supplier_name || 'Unknown';
+        const mime = doc.mime_type || doc.document_type || 'unknown';
+        const source = doc.source || doc.terms?.source || '[Unknown]';
+        return `  - ${supplier}: MIME=${mime}, Source=${source}, Items=${doc.items?.length || doc.line_items?.length || 0}`;
+      }).join('\n');
+
+      return new Response(JSON.stringify({
+        diagnostic: true,
+        blocked_reason: 'extraction_returned_no_usable_fields',
+        message: `DIAGNOSTIC: extraction returned no usable fields; blocking compose.`,
+        details: `ALL suppliers missing critical data (delivery_weeks, warranty_months, line_items):\n${diagnosticDetails}`,
+        hint: `The extraction pipeline failed. Check /document-processor logs for parsing errors. Re-upload documents or verify file content is not empty.`
+      }), {
+        status: 422,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // CRITICAL VALIDATION: Check for delivery_weeks and warranty_months
     const dataGaps: { field: string; suppliers: { supplier: string; mime: string; source: string }[] }[] = [];
     
