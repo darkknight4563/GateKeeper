@@ -146,28 +146,25 @@ const AdvancedDocumentDemo = () => {
                 className="hidden"
                 id="advanced-upload"
               />
-              <label
-                htmlFor="advanced-upload"
-                className="w-full"
+              <Button 
+                className="w-full" 
+                size="lg"
+                disabled={isProcessing}
+                onClick={() => document.getElementById('advanced-upload')?.click()}
+                asChild={false}
               >
-                <Button 
-                  className="w-full" 
-                  size="lg"
-                  disabled={isProcessing}
-                >
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-4 w-4 mr-2" />
-                      Upload & Process Document
-                    </>
-                  )}
-                </Button>
-              </label>
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload & Process Document
+                  </>
+                )}
+              </Button>
             </div>
             
             <Button 
