@@ -1,5 +1,8 @@
 project_id = "***REMOVED***"
 
+[functions.generate-charts]
+verify_jwt = true
+
 [functions.generate-executive-summary]
 verify_jwt = true
 
