@@ -43,6 +43,25 @@ serve(async (req) => {
       );
     }
 
+    // GUARD: Refuse to detect issues if critical fields are all missing
+    const hasCriticalData = documents.some(d => 
+      d.terms?.delivery_weeks != null || 
+      d.terms?.warranty_months != null ||
+      d.totals?.quoted_price != null
+    );
+
+    if (!hasCriticalData) {
+      console.error('[ISSUES] GUARD: No critical data (delivery_weeks, warranty_months, quoted_price) in any document');
+      return new Response(
+        JSON.stringify({ 
+          error: 'No critical data found in documents',
+          documents_checked: documents.length,
+          message: 'At least one document must have delivery_weeks, warranty_months, or quoted_price'
+        }),
+        { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     console.log(`[ISSUES] Analyzing ${documents.length} suppliers for issues`);
 
     const allIssues: any[] = [];

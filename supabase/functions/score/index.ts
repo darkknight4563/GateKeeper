@@ -54,6 +54,23 @@ serve(async (req) => {
       );
     }
 
+    // GUARD: Refuse to score if no delivery_weeks found in any document
+    if (!documents.some(d => d.terms?.delivery_weeks != null)) {
+      console.error('[SCORE] GUARD: No delivery_weeks found in any document');
+      return new Response(
+        JSON.stringify({ 
+          error: 'No delivery_weeks found in any document',
+          documents_checked: documents.length,
+          missing_fields: documents.map((d, i) => ({
+            doc_index: i,
+            supplier: d.supplier,
+            has_delivery_weeks: d.terms?.delivery_weeks != null
+          }))
+        }),
+        { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const riskWeights = { ...DEFAULT_WEIGHTS, ...weights };
 
     console.log(`[SCORE] Processing ${documents.length} suppliers with weights:`, riskWeights);

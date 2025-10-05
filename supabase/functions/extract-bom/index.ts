@@ -343,6 +343,23 @@ serve(async (req) => {
         )
       }
 
+      // GUARD: Require at least one spec-like token present
+      const textContent = (ocr_data.text || '').toLowerCase();
+      const hasSpecToken = 
+        /dnv|api\s*17e|tubes|fibers|length\s*m|outer\s*diameter|bend\s*radius/.test(textContent);
+
+      if (!hasSpecToken) {
+        console.error('[BOM] GUARD: No spec-like tokens (DNV, API 17E, tubes, fibers, length m) found');
+        return new Response(
+          JSON.stringify({ 
+            error: 'No technical specification tokens found in document',
+            message: 'Document must contain at least one of: DNV, API 17E, tubes, fibers, length m, outer diameter, bend radius',
+            text_preview: textContent.substring(0, 200)
+          }),
+          { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
       console.log('Extracting BOM from OCR data...')
 
       // Extract bill of materials from OCR data
