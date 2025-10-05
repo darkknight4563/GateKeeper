@@ -5,6 +5,7 @@ import DocumentUpload from "@/components/DocumentUpload";
 import VendorDashboard from "@/components/VendorDashboard";
 import AdvancedDocumentDemo from "@/components/AdvancedDocumentDemo";
 import { Button } from "@/components/ui/button";
+import ChatAssistant from "@/components/ChatAssistant";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -71,6 +72,8 @@ const Index = () => {
           </TabsContent>
         </Tabs>
       </main>
+      
+      <ChatAssistant />
     </div>
   );
 };

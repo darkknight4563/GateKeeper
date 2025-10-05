@@ -6,6 +6,7 @@ import NotificationCenter from "@/components/workflow/NotificationCenter";
 import ActionItemsManager from "@/components/workflow/ActionItemsManager";
 import TaskSyncConfig from "@/components/workflow/TaskSyncConfig";
 import { Button } from "@/components/ui/button";
+import ChatAssistant from "@/components/ChatAssistant";
 
 const ApprovalWorkflow = () => {
   const navigate = useNavigate();
@@ -91,6 +92,8 @@ const ApprovalWorkflow = () => {
           </TabsContent>
         </Tabs>
       </main>
+      
+      <ChatAssistant />
     </div>
   );
 };
