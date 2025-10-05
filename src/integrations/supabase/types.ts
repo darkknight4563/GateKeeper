@@ -14,6 +14,110 @@ export type Database = {
   }
   public: {
     Tables: {
+      approval_audit_logs: {
+        Row: {
+          action: string
+          actor_id: string
+          actor_name: string
+          actor_role: Database["public"]["Enums"]["user_role"] | null
+          comment: string | null
+          created_at: string
+          digital_signature: string
+          id: string
+          metadata: Json | null
+          new_state: Database["public"]["Enums"]["approval_state"]
+          previous_state: Database["public"]["Enums"]["approval_state"] | null
+          workflow_id: string
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          actor_name: string
+          actor_role?: Database["public"]["Enums"]["user_role"] | null
+          comment?: string | null
+          created_at?: string
+          digital_signature: string
+          id?: string
+          metadata?: Json | null
+          new_state: Database["public"]["Enums"]["approval_state"]
+          previous_state?: Database["public"]["Enums"]["approval_state"] | null
+          workflow_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          actor_name?: string
+          actor_role?: Database["public"]["Enums"]["user_role"] | null
+          comment?: string | null
+          created_at?: string
+          digital_signature?: string
+          id?: string
+          metadata?: Json | null
+          new_state?: Database["public"]["Enums"]["approval_state"]
+          previous_state?: Database["public"]["Enums"]["approval_state"] | null
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_audit_logs_workflow_id_fkey"
+            columns: ["workflow_id"]
+            isOneToOne: false
+            referencedRelation: "approval_workflows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      approval_workflows: {
+        Row: {
+          approval_chain: Json
+          created_at: string
+          current_approver_id: string | null
+          current_state: Database["public"]["Enums"]["approval_state"]
+          document_id: string
+          id: string
+          supplier_name: string
+          updated_at: string
+          vendor_offer_id: string | null
+        }
+        Insert: {
+          approval_chain?: Json
+          created_at?: string
+          current_approver_id?: string | null
+          current_state?: Database["public"]["Enums"]["approval_state"]
+          document_id: string
+          id?: string
+          supplier_name: string
+          updated_at?: string
+          vendor_offer_id?: string | null
+        }
+        Update: {
+          approval_chain?: Json
+          created_at?: string
+          current_approver_id?: string | null
+          current_state?: Database["public"]["Enums"]["approval_state"]
+          document_id?: string
+          id?: string
+          supplier_name?: string
+          updated_at?: string
+          vendor_offer_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_workflows_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "approval_workflows_vendor_offer_id_fkey"
+            columns: ["vendor_offer_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_offers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documents: {
         Row: {
           created_at: string
@@ -251,7 +355,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      approval_state: "pending" | "approved" | "rejected" | "revised"
+      user_role: "analyst" | "manager" | "director" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -378,6 +483,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      approval_state: ["pending", "approved", "rejected", "revised"],
+      user_role: ["analyst", "manager", "director", "admin"],
+    },
   },
 } as const
