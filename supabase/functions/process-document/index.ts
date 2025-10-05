@@ -1,9 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
-import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.3.136";
-
-// No worker configuration needed - using useWorker: false in getDocument
+import pdfParse from "https://esm.sh/pdf-parse@1.1.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,22 +28,16 @@ async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]
   const fragments: Fragment[] = [];
   
   try {
-    const loadingTask = pdfjsLib.getDocument({ data: bytes, useWorker: false });
-    const pdf = await loadingTask.promise;
+    // @ts-ignore - pdf-parse expects Buffer but Uint8Array should work
+    const data = await pdfParse(bytes);
     
-    for (let p = 1; p <= pdf.numPages; p++) {
-      const page = await pdf.getPage(p);
-      const content = await page.getTextContent();
-      const text = content.items.map((i: any) => i.str).join(" ").replace(/\s+/g, " ").trim();
-      
-      if (text.length > 0) {
-        fragments.push({
-          type: 'text',
-          content: text,
-          source: `${filename}#p${p}`,
-          metadata: { page: p }
-        });
-      }
+    if (data.text && data.text.trim().length > 0) {
+      fragments.push({
+        type: 'text',
+        content: data.text.trim(),
+        source: `${filename}`,
+        metadata: { pages: data.numpages }
+      });
     }
   } catch (error) {
     console.error('PDF parsing error:', error);
