@@ -47,6 +47,18 @@ function getSeverityIcon(severity: string): string {
   }
 }
 
+// Helper to check for critical data gaps
+function hasCriticalGaps(documents: any[]): boolean {
+  return documents.every((doc: any) => {
+    const hasDelivery = doc.delivery_weeks || doc.terms?.delivery_weeks || doc.lead_time;
+    const hasWarranty = doc.warranty_months || doc.terms?.warranty_months;
+    const hasLineItems = Array.isArray(doc.line_items) && doc.line_items.length > 0;
+    const hasItems = Array.isArray(doc.items) && doc.items.length > 0;
+    
+    return !hasDelivery && !hasWarranty && !hasLineItems && !hasItems;
+  });
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -56,6 +68,12 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Developer toggles
+    const USE_DEMO_FIXTURE = Deno.env.get('USE_DEMO_FIXTURE') === 'true';
+    const BLOCK_COMPOSE_ON_GAPS = Deno.env.get('BLOCK_COMPOSE_ON_GAPS') === 'true';
+
+    console.log('[COMPOSE] Developer toggles:', { USE_DEMO_FIXTURE, BLOCK_COMPOSE_ON_GAPS });
 
     // Authenticate user
     const authHeader = req.headers.get('Authorization');
@@ -96,6 +114,29 @@ serve(async (req) => {
       locale,
       currency_rates
     });
+
+    // DEVELOPER TOGGLE: Block composition if critical gaps detected
+    if (BLOCK_COMPOSE_ON_GAPS && documents && hasCriticalGaps(documents)) {
+      const diagnosticDetails = documents.map((doc: any) => {
+        const supplier = doc.supplier || doc.supplier_name || 'Unknown';
+        const mime = doc.mime_type || doc.document_type || 'unknown';
+        const source = doc.source || doc.terms?.source || '[Unknown]';
+        return `  - ${supplier}: MIME=${mime}, Source=${source}, Items=${doc.items?.length || doc.line_items?.length || 0}`;
+      }).join('\n');
+
+      console.error('[COMPOSE] BLOCKED by BLOCK_COMPOSE_ON_GAPS: critical data gaps detected');
+      return new Response(JSON.stringify({
+        diagnostic: true,
+        blocked_by: 'BLOCK_COMPOSE_ON_GAPS=true',
+        blocked_reason: 'critical_data_gaps',
+        message: 'Blocked compose: critical data gaps',
+        details: `ALL suppliers missing critical data (delivery_weeks, warranty_months, line_items):\n${diagnosticDetails}`,
+        hint: 'Set BLOCK_COMPOSE_ON_GAPS=false to allow composition with partial data, or fix extraction pipeline.'
+      }), {
+        status: 422,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Validate inputs - check for missing stages
     const missingStages: string[] = [];
