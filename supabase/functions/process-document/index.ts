@@ -3,8 +3,36 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.3.136";
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.min.mjs';
+// Configure PDF.js worker (Deno)
+try {
+  const candidates = [
+    'https://esm.sh/pdfjs-dist@4.3.136/build/pdf.worker.mjs',
+    'https://esm.sh/pdfjs-dist@4.3.136/legacy/build/pdf.worker.mjs',
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.3.136/build/pdf.worker.mjs',
+  ];
+  let worker: Worker | null = null;
+  for (const url of candidates) {
+    try {
+      worker = new Worker(url, { type: 'module', name: 'pdfjs-worker' });
+      // @ts-ignore - types may not include GlobalWorkerOptions in this runtime
+      pdfjsLib.GlobalWorkerOptions.workerSrc = url;
+      // @ts-ignore
+      pdfjsLib.GlobalWorkerOptions.workerPort = worker;
+      console.log('PDF.js worker initialized with', url);
+      break;
+    } catch (e) {
+      console.warn('Failed to init PDF.js worker from', url, e);
+      continue;
+    }
+  }
+} catch (_e) {
+  // Fallback: attempt no-worker mode
+  // @ts-ignore
+  if (pdfjsLib?.GlobalWorkerOptions) {
+    // @ts-ignore
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+  }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
