@@ -1,16 +1,24 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, BarChart3, Brain } from "lucide-react";
+import { Upload, BarChart3, Brain, CheckCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import DocumentUpload from "@/components/DocumentUpload";
 import VendorDashboard from "@/components/VendorDashboard";
 import AdvancedDocumentDemo from "@/components/AdvancedDocumentDemo";
+import { Button } from "@/components/ui/button";
 
 const Index = () => {
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-6 py-4">
+        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-foreground">ClarityChain AI</h1>
+          <Button variant="outline" onClick={() => navigate("/approval-workflow")}>
+            <CheckCircle className="h-4 w-4 mr-2" />
+            Approval Workflow
+          </Button>
         </div>
       </header>
 
