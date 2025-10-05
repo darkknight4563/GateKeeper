@@ -1,22 +1,30 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle, Bell, ListTodo, Settings } from "lucide-react";
+import { CheckCircle, Bell, ListTodo, Settings, ArrowLeft } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import WorkflowDashboard from "@/components/workflow/WorkflowDashboard";
 import NotificationCenter from "@/components/workflow/NotificationCenter";
 import ActionItemsManager from "@/components/workflow/ActionItemsManager";
 import TaskSyncConfig from "@/components/workflow/TaskSyncConfig";
+import { Button } from "@/components/ui/button";
 
 const ApprovalWorkflow = () => {
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-6 py-4">
+        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-foreground">Approval Workflow</h1>
             <p className="text-sm text-muted-foreground mt-1">
               Manage approvals, notifications, and action items
             </p>
           </div>
+          <Button variant="outline" onClick={() => navigate("/")}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Main
+          </Button>
         </div>
       </header>
 
