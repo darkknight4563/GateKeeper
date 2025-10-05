@@ -1,6 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.3.136";
+
+// Configure PDF.js to run without a worker in Deno
+try {
+  // @ts-ignore
+  if ((pdfjsLib as any)?.GlobalWorkerOptions) {
+    // @ts-ignore
+    (pdfjsLib as any).GlobalWorkerOptions.workerSrc = '';
+  }
+} catch (_) { /* no-op */ }
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') ?? '*',
@@ -23,50 +33,26 @@ interface Fragment {
   metadata?: Record<string, any>;
 }
 
-// PDF parser - basic extraction by finding text patterns in PDF structure
+// PDF parser - extracts text from PDF using pdfjs in no-worker mode
 async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]> {
   const fragments: Fragment[] = [];
   
   try {
-    // Convert to string to search for text objects
-    const pdfString = new TextDecoder('latin1').decode(bytes);
+    const loadingTask = (pdfjsLib as any).getDocument({ data: bytes, useWorker: false });
+    const pdf = await loadingTask.promise;
     
-    // Extract text from PDF stream objects
-    // PDFs store text in stream objects with commands like (Text) Tj or [(Text)] TJ
-    const textMatches = pdfString.matchAll(/\(([^)]+)\)\s*(?:Tj|TJ)/g);
-    const bracketMatches = pdfString.matchAll(/\[([^\]]+)\]\s*TJ/g);
-    
-    const extractedTexts: string[] = [];
-    
-    // Extract text from parentheses
-    for (const match of textMatches) {
-      if (match[1]) {
-        extractedTexts.push(match[1]);
-      }
-    }
-    
-    // Extract text from brackets
-    for (const match of bracketMatches) {
-      if (match[1]) {
-        // Clean up bracket notation
-        const cleaned = match[1]
-          .replace(/\([^)]*\)/g, (m) => m.slice(1, -1))
-          .replace(/[-\d.]+/g, ' ')
-          .trim();
-        if (cleaned) extractedTexts.push(cleaned);
-      }
-    }
-    
-    if (extractedTexts.length > 0) {
-      const fullText = extractedTexts.join(' ').replace(/\s+/g, ' ').trim();
-      console.log(`Extracted ${fullText.length} characters from PDF`);
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      // @ts-ignore
+      const text = content.items.map((i: any) => i.str).join(' ').replace(/\s+/g, ' ').trim();
       
-      if (fullText.length > 50) {
+      if (text.length > 0) {
         fragments.push({
           type: 'text',
-          content: fullText,
-          source: `${filename}`,
-          metadata: {}
+          content: text,
+          source: `${filename}#p${p}`,
+          metadata: { page: p }
         });
       }
     }
@@ -84,7 +70,7 @@ async function parseXlsx(bytes: Uint8Array, filename: string): Promise<Fragment[
   const fragments: Fragment[] = [];
   
   try {
-    const wb = XLSX.read(bytes, { type: 'buffer' });
+    const wb = XLSX.read(bytes, { type: 'array' });
     
     for (const sheetName of wb.SheetNames) {
       const sheet = wb.Sheets[sheetName];
