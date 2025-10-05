@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.3.136";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,24 +28,22 @@ async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]
   const fragments: Fragment[] = [];
   
   try {
-    // For now, we'll use a simple text extraction
-    // In production, you'd use a PDF library like pdf-parse
-    const decoder = new TextDecoder('utf-8');
-    const text = decoder.decode(bytes);
+    const loadingTask = pdfjsLib.getDocument({ data: bytes });
+    const pdf = await loadingTask.promise;
     
-    // Extract readable text (skip binary data)
-    const textLines = text.split('\n').filter(line => {
-      const isPrintable = /^[\x20-\x7E\s]*$/.test(line);
-      return isPrintable && line.trim().length > 0;
-    });
-    
-    if (textLines.length > 0) {
-      fragments.push({
-        type: 'text',
-        content: textLines.join('\n'),
-        source: `${filename}#pdf`,
-        metadata: { pages: 1 }
-      });
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      const text = content.items.map((i: any) => i.str).join(" ").replace(/\s+/g, " ").trim();
+      
+      if (text.length > 0) {
+        fragments.push({
+          type: 'text',
+          content: text,
+          source: `${filename}#p${p}`,
+          metadata: { page: p }
+        });
+      }
     }
   } catch (error) {
     console.error('PDF parsing error:', error);
