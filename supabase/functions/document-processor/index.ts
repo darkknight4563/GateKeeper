@@ -1,5 +1,36 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
+
+// Schema validation for API response
+const ItemSchema = z.object({
+  name: z.string().nullable(),
+  name_original: z.string().nullable(),
+  part_number: z.string().nullable(),
+  qty: z.number().nullable(),
+  unit: z.string().nullable(),
+  price: z.number().nullable(),
+  delivery: z.string().nullable(),
+  warranty: z.string().nullable(),
+})
+
+const TermsSchema = z.object({
+  payment: z.string().nullable(),
+  penalties: z.string().nullable(),
+  validity: z.string().nullable(),
+  location: z.string().nullable(),
+  contact: z.string().nullable(),
+}).nullable()
+
+const ExtractedDataSchema = z.object({
+  language_detected: z.string(),
+  supplier: z.string(),
+  document_type: z.string().nullable(),
+  date: z.string().nullable(),
+  currency: z.string(),
+  items: z.array(ItemSchema),
+  terms: TermsSchema,
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -156,10 +187,38 @@ Return ONLY valid JSON.`
 
     // Parse the JSON response (handle potential markdown code blocks)
     let extractedData
+    let validationNotes: string[] = []
+    
     try {
       const jsonMatch = extractedContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
       const jsonStr = jsonMatch ? jsonMatch[1] : extractedContent
-      extractedData = JSON.parse(jsonStr.trim())
+      const parsedData = JSON.parse(jsonStr.trim())
+      
+      // Validate the parsed data against schema
+      const validationResult = ExtractedDataSchema.safeParse(parsedData)
+      
+      if (!validationResult.success) {
+        console.warn('Schema validation failed:', validationResult.error.errors)
+        
+        // Track missing/invalid fields
+        validationResult.error.errors.forEach(err => {
+          validationNotes.push(`Missing or invalid field: ${err.path.join('.')} - ${err.message}`)
+        })
+        
+        // Fill missing required fields with defaults
+        extractedData = {
+          language_detected: parsedData.language_detected || 'unknown',
+          supplier: parsedData.supplier || null,
+          document_type: parsedData.document_type || null,
+          date: parsedData.date || null,
+          currency: parsedData.currency || 'USD',
+          items: Array.isArray(parsedData.items) ? parsedData.items : [],
+          terms: parsedData.terms || null,
+        }
+      } else {
+        extractedData = validationResult.data
+      }
+      
     } catch (parseError) {
       console.error('JSON parse error:', parseError, 'Content:', extractedContent)
       throw new Error('Failed to parse extracted data as JSON')
@@ -205,7 +264,8 @@ Return ONLY valid JSON.`
       JSON.stringify({ 
         success: true,
         vendor_data: vendorData,
-        raw_extraction: extractedData
+        raw_extraction: extractedData,
+        validation_notes: validationNotes.length > 0 ? validationNotes : undefined
       }),
       { 
         status: 200, 
