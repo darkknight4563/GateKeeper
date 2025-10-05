@@ -77,3 +77,6 @@ verify_jwt = true
 
 [functions.explain-decision]
 verify_jwt = true
+
+[functions.ingest-guard]
+verify_jwt = true
