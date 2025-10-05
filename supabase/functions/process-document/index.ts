@@ -59,44 +59,38 @@ async function parseXlsx(bytes: Uint8Array, filename: string): Promise<Fragment[
   const fragments: Fragment[] = [];
   
   try {
-    const workbook = XLSX.read(bytes, { type: 'array' });
+    const wb = XLSX.read(bytes, { type: 'buffer' });
     
-    for (const sheetName of workbook.SheetNames) {
-      const worksheet = workbook.Sheets[sheetName];
-      const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+    for (const sheetName of wb.SheetNames) {
+      const sheet = wb.Sheets[sheetName];
+      const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:Z200');
       
-      // Convert sheet to array of arrays
-      const data: any[][] = [];
+      const rows: any[][] = [];
       for (let R = range.s.r; R <= range.e.r; R++) {
         const row: any[] = [];
         for (let C = range.s.c; C <= range.e.c; C++) {
-          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-          const cell = worksheet[cellAddress];
-          row.push(cell ? (cell.v ?? '') : '');
+          const addr = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = sheet[addr];
+          row.push(cell?.v ?? '');
         }
-        data.push(row);
+        rows.push(row);
       }
       
-      // Filter out empty rows
-      const nonEmptyData = data.filter(row => 
-        row.some(cell => cell !== null && cell !== undefined && String(cell).trim() !== '')
-      );
-      
-      if (nonEmptyData.length > 0) {
+      // Keep only non-empty grids
+      const nonEmpty = rows.some(r => r.some(v => v !== ''));
+      if (nonEmpty) {
         // Convert to markdown table format
-        const tableText = nonEmptyData.map(row => 
+        const tableText = rows.map(row => 
           row.map(cell => String(cell || '')).join(' | ')
         ).join('\n');
-        
-        const cellRange = `${XLSX.utils.encode_cell({ r: range.s.r, c: range.s.c })}:${XLSX.utils.encode_cell({ r: range.e.r, c: range.e.c })}`;
         
         fragments.push({
           type: 'table',
           content: tableText,
-          source: `${filename}#${sheetName}!${cellRange}`,
+          source: `${filename}#${sheetName}!${sheet['!ref']}`,
           metadata: {
             sheet: sheetName,
-            rows: nonEmptyData.length,
+            rows: rows.length,
             cols: range.e.c - range.s.c + 1
           }
         });
