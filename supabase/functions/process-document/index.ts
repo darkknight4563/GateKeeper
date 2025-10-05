@@ -23,34 +23,52 @@ interface Fragment {
   metadata?: Record<string, any>;
 }
 
-// PDF parser - simple text extraction from PDF bytes
+// PDF parser - basic extraction by finding text patterns in PDF structure
 async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]> {
   const fragments: Fragment[] = [];
   
   try {
-    // Convert bytes to string and extract readable text
-    const decoder = new TextDecoder('utf-8', { fatal: false });
-    let text = decoder.decode(bytes);
+    // Convert to string to search for text objects
+    const pdfString = new TextDecoder('latin1').decode(bytes);
     
-    // Remove PDF binary markers and extract text content
-    // This is a simple approach - looks for text between common PDF delimiters
-    text = text
-      .replace(/\/[A-Za-z]+\s+/g, ' ') // Remove PDF commands
-      .replace(/\[|\]|\(|\)/g, ' ')     // Remove brackets
-      .replace(/<<|>>/g, ' ')           // Remove angle brackets
-      .replace(/\s+/g, ' ')             // Normalize whitespace
-      .trim();
+    // Extract text from PDF stream objects
+    // PDFs store text in stream objects with commands like (Text) Tj or [(Text)] TJ
+    const textMatches = pdfString.matchAll(/\(([^)]+)\)\s*(?:Tj|TJ)/g);
+    const bracketMatches = pdfString.matchAll(/\[([^\]]+)\]\s*TJ/g);
     
-    // Filter out non-printable characters
-    text = text.replace(/[^\x20-\x7E\n\r\t]/g, '');
+    const extractedTexts: string[] = [];
     
-    if (text.length > 100) { // Require at least some content
-      fragments.push({
-        type: 'text',
-        content: text,
-        source: `${filename}`,
-        metadata: {}
-      });
+    // Extract text from parentheses
+    for (const match of textMatches) {
+      if (match[1]) {
+        extractedTexts.push(match[1]);
+      }
+    }
+    
+    // Extract text from brackets
+    for (const match of bracketMatches) {
+      if (match[1]) {
+        // Clean up bracket notation
+        const cleaned = match[1]
+          .replace(/\([^)]*\)/g, (m) => m.slice(1, -1))
+          .replace(/[-\d.]+/g, ' ')
+          .trim();
+        if (cleaned) extractedTexts.push(cleaned);
+      }
+    }
+    
+    if (extractedTexts.length > 0) {
+      const fullText = extractedTexts.join(' ').replace(/\s+/g, ' ').trim();
+      console.log(`Extracted ${fullText.length} characters from PDF`);
+      
+      if (fullText.length > 50) {
+        fragments.push({
+          type: 'text',
+          content: fullText,
+          source: `${filename}`,
+          metadata: {}
+        });
+      }
     }
   } catch (error) {
     console.error('PDF parsing error:', error);
