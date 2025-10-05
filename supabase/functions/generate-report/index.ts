@@ -82,13 +82,18 @@ serve(async (req) => {
       });
     }
 
-    // Prepare data for AI recommendation
+    // Prepare data for AI recommendation with full vendor details
     const comparisonData = vendors.map(v => ({
       vendor: v.vendor_name,
       price: v.quoted_price,
+      currency: v.currency,
+      items_count: v.items_count,
       tco: v.tco_calculations?.[0]?.calculated_tco || v.quoted_price,
+      tco_breakdown: v.tco_calculations?.[0]?.breakdown || {},
       risk_score: v.risk_assessments?.[0]?.risk_score || 0,
+      risk_factors: v.risk_assessments?.[0]?.risk_factors || [],
       lead_time: v.lead_time_analysis?.[0]?.estimated_lead_time || 0,
+      extracted_data: v.extracted_data || {},
     }));
 
     // Generate AI recommendation
@@ -152,6 +157,18 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
     return currentTCO < bestTCO ? current : best;
   });
 
+  const worstVendor = vendors.reduce((worst, current) => {
+    const currentTCO = current.tco_calculations?.[0]?.calculated_tco || current.quoted_price;
+    const worstTCO = worst.tco_calculations?.[0]?.calculated_tco || worst.quoted_price;
+    return currentTCO > worstTCO ? current : worst;
+  });
+
+  const bestTCO = bestVendor.tco_calculations?.[0]?.calculated_tco || bestVendor.quoted_price;
+  const worstTCO = worstVendor.tco_calculations?.[0]?.calculated_tco || worstVendor.quoted_price;
+  const savings = worstTCO - bestTCO;
+  const avgTCO = vendors.reduce((sum, v) => sum + (v.tco_calculations?.[0]?.calculated_tco || v.quoted_price), 0) / vendors.length;
+  const highRiskCount = vendors.filter(v => (v.risk_assessments?.[0]?.risk_score || 0) >= 70).length;
+
   const vendorRows = vendors.map(v => {
     const tco = v.tco_calculations?.[0]?.calculated_tco || v.quoted_price;
     const riskScore = v.risk_assessments?.[0]?.risk_score || 0;
@@ -162,21 +179,94 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
     return `
       <tr style="${isRecommended ? 'background-color: #f0fdf4;' : ''}">
         <td style="padding: 12px; border: 1px solid #e5e7eb;">${v.vendor_name}${isRecommended ? ' ⭐' : ''}</td>
-        <td style="padding: 12px; border: 1px solid #e5e7eb;">$${Number(v.quoted_price).toLocaleString()}</td>
-        <td style="padding: 12px; border: 1px solid #e5e7eb;">$${Number(tco).toLocaleString()}</td>
+        <td style="padding: 12px; border: 1px solid #e5e7eb;">${v.currency} ${Number(v.quoted_price).toLocaleString()}</td>
+        <td style="padding: 12px; border: 1px solid #e5e7eb;">${v.currency} ${Number(tco).toLocaleString()}</td>
         <td style="padding: 12px; border: 1px solid #e5e7eb;">${leadTime} days</td>
+        <td style="padding: 12px; border: 1px solid #e5e7eb;">${riskScore}/100</td>
         <td style="padding: 12px; border: 1px solid #e5e7eb;">
           <span style="padding: 4px 8px; border-radius: 4px; background-color: ${
             riskLevel === 'High' ? '#fee2e2' : riskLevel === 'Medium' ? '#fef3c7' : '#dcfce7'
           }; color: ${
             riskLevel === 'High' ? '#991b1b' : riskLevel === 'Medium' ? '#92400e' : '#166534'
           };">
-            ${riskLevel} (${riskScore})
+            ${riskLevel}
           </span>
         </td>
       </tr>
     `;
   }).join('');
+
+  // Risk Score Analysis section
+  const riskAnalysis = vendors.map(v => {
+    const risk = v.risk_assessments?.[0];
+    const riskScore = risk?.risk_score || 0;
+    const riskFactors = Array.isArray(risk?.risk_factors) ? risk.risk_factors : [];
+    
+    return `
+      <div style="margin-bottom: 15px;">
+        <h3 style="color: #1f2937; margin: 5px 0;">${v.vendor_name} (Risk Score: ${riskScore}/100)</h3>
+        ${riskFactors.length > 0 ? `
+          <ul style="margin: 5px 0 15px 0; padding-left: 20px;">
+            ${riskFactors.map((factor: string) => `<li>${factor}</li>`).join('')}
+          </ul>
+        ` : '<p style="margin: 5px 0; color: #6b7280;">No specific risk factors identified</p>'}
+      </div>
+    `;
+  }).join('');
+
+  // Issues & Clarifications section
+  const issuesAndClarifications = vendors.map(v => {
+    const extractedData = v.extracted_data || {};
+    const issues = extractedData.issues || [];
+    
+    if (issues.length === 0) return '';
+    
+    return `
+      <div style="margin-bottom: 15px;">
+        <h3 style="color: #1f2937; margin: 5px 0;">${v.vendor_name} (${issues.length} ${issues.length === 1 ? 'issue' : 'issues'})</h3>
+        <ul style="margin: 5px 0 15px 0; padding-left: 20px;">
+          ${issues.map((issue: string) => `<li>${issue}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }).join('');
+
+  // Technical Specifications (BOM) table
+  const bomTable = `
+    <table>
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Tubes</th>
+          <th>Fibers</th>
+          <th>OD</th>
+          <th>Weight</th>
+          <th>Bend Radius</th>
+          <th>Length</th>
+          <th>Spec</th>
+          <th>Cert</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${vendors.map(v => {
+          const specs = v.extracted_data?.technical_specs || {};
+          return `
+            <tr>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${v.vendor_name}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.tubes || 'N/A'}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.fibers || 'N/A'}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.outerDiameter || 'N/A'}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.weight || 'Not specified'}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.bendRadius || 'N/A'}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.length || 'N/A'}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.specification || 'N/A'}</td>
+              <td style="padding: 12px; border: 1px solid #e5e7eb;">${specs.certification || 'N/A'}</td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
 
   const vendorDetails = vendors.map(v => {
     const tco = v.tco_calculations?.[0];
@@ -191,11 +281,11 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px;">
           <div>
-            <p style="margin: 5px 0;"><strong>Quoted Price:</strong> $${Number(v.quoted_price).toLocaleString()} ${v.currency}</p>
+            <p style="margin: 5px 0;"><strong>Quoted Price:</strong> ${v.currency} ${Number(v.quoted_price).toLocaleString()}</p>
             <p style="margin: 5px 0;"><strong>Items Count:</strong> ${v.items_count}</p>
           </div>
           <div>
-            <p style="margin: 5px 0;"><strong>Total Cost of Ownership:</strong> $${Number(tco?.calculated_tco || v.quoted_price).toLocaleString()}</p>
+            <p style="margin: 5px 0;"><strong>Total Cost of Ownership:</strong> ${v.currency} ${Number(tco?.calculated_tco || v.quoted_price).toLocaleString()}</p>
             <p style="margin: 5px 0;"><strong>Lead Time:</strong> ${leadTime?.estimated_lead_time || 'N/A'} days</p>
           </div>
         </div>
@@ -205,7 +295,7 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
             <h4 style="color: #374151; margin-top: 0;">TCO Breakdown</h4>
             <ul style="margin: 5px 0; padding-left: 20px;">
               ${Object.entries(tco.breakdown || {}).map(([key, value]) => 
-                `<li><strong>${key}:</strong> $${Number(value).toLocaleString()}</li>`
+                `<li><strong>${key}:</strong> ${v.currency} ${Number(value).toLocaleString()}</li>`
               ).join('')}
             </ul>
           </div>
@@ -215,11 +305,11 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
           <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px;">
             <h4 style="color: #374151; margin-top: 0;">Risk Assessment</h4>
             <p><strong>Risk Score:</strong> ${risk.risk_score}/100</p>
-            <ul style="margin: 5px 0; padding-left: 20px;">
-              ${Object.entries(risk.risk_factors || {}).map(([key, value]) => 
-                `<li><strong>${key}:</strong> ${value}</li>`
-              ).join('')}
-            </ul>
+            ${Array.isArray(risk.risk_factors) && risk.risk_factors.length > 0 ? `
+              <ul style="margin: 5px 0; padding-left: 20px;">
+                ${risk.risk_factors.map((factor: string) => `<li>${factor}</li>`).join('')}
+              </ul>
+            ` : ''}
           </div>
         ` : ''}
       </div>
@@ -279,25 +369,25 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
 <body>
   <h1>Vendor Comparison Report</h1>
   
-  <div class="metadata">
-    <p><strong>Document:</strong> ${job.documents.filename}</p>
-    <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
-    <p><strong>Job ID:</strong> ${job.id}</p>
+  <div style="background-color: #dbeafe; border-left: 4px solid #3b82f6; padding: 20px; margin: 20px 0; border-radius: 4px;">
+    <h2 style="margin-top: 0; color: #1f2937;">Winner: ${bestVendor.vendor_name}</h2>
+    <p style="font-size: 1.2em; margin: 10px 0;">
+      <strong>TCO:</strong> ${bestVendor.currency} ${Number(bestTCO).toLocaleString()} &nbsp; | &nbsp;
+      <strong>Lead Time:</strong> ${bestVendor.lead_time_analysis?.[0]?.estimated_lead_time || 'N/A'} days
+    </p>
+    <p style="color: #059669; font-weight: bold; font-size: 1.1em;">
+      Saves ${bestVendor.currency} ${Number(savings).toLocaleString()} vs worst option
+    </p>
   </div>
 
-  <div class="recommendation-box">
-    <h2 style="margin-top: 0;">Recommendation</h2>
-    <p>${recommendation}</p>
-  </div>
-
-  <h2>Summary Comparison</h2>
   <table>
     <thead>
       <tr>
         <th>Vendor</th>
         <th>Quoted Price</th>
-        <th>Total Cost (TCO)</th>
+        <th>Total TCO</th>
         <th>Lead Time</th>
+        <th>Risk Score</th>
         <th>Risk Level</th>
       </tr>
     </thead>
@@ -306,11 +396,26 @@ function generateHTMLReport(job: any, vendors: any[], recommendation: string): s
     </tbody>
   </table>
 
-  <h2>Detailed Vendor Analysis</h2>
-  ${vendorDetails}
+  <h2>Summary Statistics:</h2>
+  <div style="background-color: #f9fafb; padding: 15px; border-radius: 8px; margin: 20px 0;">
+    <p style="margin: 5px 0;"><strong>Total Vendors Analyzed:</strong> ${vendors.length}</p>
+    <p style="margin: 5px 0;"><strong>Average TCO:</strong> ${bestVendor.currency} ${Number(avgTCO).toLocaleString()}</p>
+    <p style="margin: 5px 0;"><strong>High Risk Vendors:</strong> ${highRiskCount}</p>
+  </div>
+
+  <h2>Risk Score Analysis</h2>
+  ${riskAnalysis}
+
+  ${issuesAndClarifications ? `
+    <h2>ISSUES & CLARIFICATIONS NEEDED</h2>
+    ${issuesAndClarifications}
+  ` : ''}
+
+  <h2>Technical Specifications (BOM)</h2>
+  ${bomTable}
 
   <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 0.85em;">
-    <p>This report was automatically generated by the Vendor Comparison System.</p>
+    <p>Generated on ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'numeric', year: 'numeric' })}, ${new Date().toLocaleTimeString('en-GB')}</p>
   </div>
 </body>
 </html>
