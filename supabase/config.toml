@@ -86,3 +86,6 @@ verify_jwt = true
 
 [functions.score]
 verify_jwt = true
+
+[functions.issues]
+verify_jwt = true
