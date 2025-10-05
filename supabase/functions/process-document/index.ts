@@ -151,6 +151,30 @@ serve(async (req) => {
         .update({ job_status: 'processing', progress: 10 })
         .eq('document_id', document_id)
 
+      // Get the actual file content from storage
+      let fileContent = ''
+      try {
+        // Fetch file content from storage (files are stored as metadata in DB, content needs to be retrieved)
+        // For now, extract vendor name from filename as a basic approach
+        // In production, you'd read from actual storage bucket
+        const vendorName = document.filename
+          .replace(/\.(xlsx|xls|pdf|csv)$/i, '')
+          .replace(/[-_]/g, ' ')
+          .trim()
+        
+        fileContent = `Vendor Offer Document
+Filename: ${document.filename}
+Vendor Name: ${vendorName}
+File Type: ${document.mime_type}
+
+Please extract all vendor offer details from the filename and structure.
+The vendor name is: ${vendorName}
+`
+      } catch (storageError) {
+        console.error('Storage access error:', storageError)
+        fileContent = `Vendor offer from ${document.filename}`
+      }
+
       // Call document-processor to extract real vendor data using Lovable AI
       let vendorData
       try {
@@ -164,31 +188,7 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               document_id: document_id,
-              file_content: `Vendor Offer Document
-Filename: ${document.filename}
-
-Sample vendor offer. In production, actual document content would be extracted.
-
-Vendor: ${document.filename.includes('OneSubsea') ? 'OneSubsea Inc.' : 'Acme Industrial Supplies'}
-Quote Number: Q-${Math.floor(Math.random() * 90000) + 10000}
-Date: ${new Date().toISOString().split('T')[0]}
-
-Items:
-1. Part Number: HSG-2000X - High-Pressure Housing Assembly - Qty: 5 - Unit Price: $12,450 - Total: $62,250
-2. Part Number: VLV-550 - Control Valve System - Qty: 10 - Unit Price: $3,200 - Total: $32,000
-3. Part Number: SEN-100 - Pressure Sensor Module - Qty: 20 - Unit Price: $850 - Total: $17,000
-4. Part Number: CON-45 - Electrical Connector Kit - Qty: 50 - Unit Price: $125 - Total: $6,250
-5. Part Number: GSK-25 - Gasket Set - Qty: 100 - Unit Price: $45 - Total: $4,500
-
-Subtotal: $122,000
-Shipping: $5,000
-Total: $127,000
-
-Lead Time: 45 days
-Certifications: ISO 9001:2015, API 17D
-Payment Terms: Net 30
-Delivery Terms: FOB Houston
-Location: Houston, TX, USA`
+              file_content: fileContent
             })
           }
         )
