@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.generate-report]
 verify_jwt = true
+
+[functions.summarize-document]
+verify_jwt = true
