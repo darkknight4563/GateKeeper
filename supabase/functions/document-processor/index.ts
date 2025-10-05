@@ -86,7 +86,7 @@ serve(async (req) => {
       )
     }
 
-    const { document_id, file_content, filename, mime_type } = await req.json()
+    const { document_id, file_content, filename, mime_type, fragments } = await req.json()
 
     if (!document_id) {
       return new Response(
@@ -95,160 +95,178 @@ serve(async (req) => {
       )
     }
 
-    // Guard: Validate file_content is not empty
-    if (!file_content || file_content.length < 1000) {
-      console.error('Empty or too small file content received in document-processor:', file_content?.length || 0, 'bytes')
-      return new Response(
-        JSON.stringify({ 
-          error: `Empty file content received in document-processor (${file_content?.length || 0} bytes). File may not have uploaded correctly.` 
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    console.log(`Processing document ${document_id}, type: ${mime_type}, content size: ${file_content.length} bytes`)
-
-    // Get document metadata
-    const { data: document, error: docError } = await supabase
-      .from('documents')
-      .select('*')
-      .eq('id', document_id)
-      .eq('user_id', user.id)
-      .single()
-
-    if (docError || !document) {
-      return new Response(
-        JSON.stringify({ error: 'Document not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Parse file based on MIME type and create structured fragments
-    const fragments: any[] = []
-    const mimeType = mime_type || document.mime_type
-    const supplierHint = filename ? filename.split(/[_\-\.]/)[0] : null
+    // Support both old API (file_content) and new API (fragments)
+    let parsedFragments: any[];
     
-    try {
-      if (mimeType === 'application/pdf') {
-        console.log('Parsing PDF - extracting text fragments')
-        try {
-          const textData = atob(file_content)
-          const matches = textData.match(/[\x20-\x7E]+/g) || []
-          const pageText = matches.filter(s => s.length > 3).join('\n')
+    if (fragments) {
+      // New API: fragments already parsed
+      console.log(`Received ${fragments.length} pre-parsed fragments for document ${document_id}`)
+      parsedFragments = fragments;
+    } else if (file_content) {
+      // Old API: Guard and parse file_content
+      if (file_content.length < 1000) {
+        console.error('Empty or too small file content received:', file_content.length, 'bytes')
+        return new Response(
+          JSON.stringify({ 
+            error: `Empty file content received (${file_content.length} bytes). File may not have uploaded correctly.` 
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log(`Processing document ${document_id}, type: ${mime_type}, content size: ${file_content.length} bytes`)
+
+      // Get document metadata
+      const { data: document, error: docError } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('id', document_id)
+        .eq('user_id', user.id)
+        .single()
+
+      if (docError || !document) {
+        return new Response(
+          JSON.stringify({ error: 'Document not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Parse file based on MIME type and create structured fragments
+      const tempFragments: any[] = []
+      const mimeType = mime_type || document.mime_type
+      const supplierHint = filename ? filename.split(/[_\-\.]/)[0] : null
+      
+      try {
+        if (mimeType === 'application/pdf') {
+          console.log('Parsing PDF - extracting text fragments')
+          try {
+            const textData = atob(file_content)
+            const matches = textData.match(/[\x20-\x7E]+/g) || []
+            const pageText = matches.filter(s => s.length > 3).join('\n')
+            
+            // Split into logical fragments (pages or sections)
+            const lines = pageText.split('\n').filter(l => l.trim())
+            let currentFragment = ''
+            let pageNum = 1
+            
+            lines.forEach((line, idx) => {
+              currentFragment += line + '\n'
+              // Create fragment every ~30 lines or at natural breaks
+              if ((idx + 1) % 30 === 0 || idx === lines.length - 1) {
+                if (currentFragment.trim()) {
+                  tempFragments.push({
+                    source: `${filename}#p${pageNum}`,
+                    text: currentFragment.trim()
+                  })
+                  currentFragment = ''
+                  pageNum++
+                }
+              }
+            })
+            
+            console.log(`Extracted ${tempFragments.length} PDF fragments`)
+          } catch (e) {
+            console.warn('PDF parsing fallback:', e)
+            tempFragments.push({
+              source: `${filename}#filename`,
+              text: `Filename: ${filename}`
+            })
+          }
           
-          // Split into logical fragments (pages or sections)
-          const lines = pageText.split('\n').filter(l => l.trim())
-          let currentFragment = ''
-          let pageNum = 1
+        } else if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
+                   mimeType === 'application/vnd.ms-excel') {
+          console.log('Parsing Excel - extracting table fragments')
+          const binaryData = Uint8Array.from(atob(file_content), c => c.charCodeAt(0))
+          const workbook = XLSX.read(binaryData, { type: 'array' })
           
-          lines.forEach((line, idx) => {
-            currentFragment += line + '\n'
-            // Create fragment every ~30 lines or at natural breaks
-            if ((idx + 1) % 30 === 0 || idx === lines.length - 1) {
-              if (currentFragment.trim()) {
-                fragments.push({
-                  source: `${filename}#p${pageNum}`,
-                  text: currentFragment.trim()
+          workbook.SheetNames.forEach((sheetName: string) => {
+            const sheet = workbook.Sheets[sheetName]
+            const jsonData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false }) as any[][]
+            
+            if (jsonData.length > 0) {
+              // Find header row (first non-empty row)
+              const headerRowIdx = jsonData.findIndex(row => row && row.some(cell => cell))
+              if (headerRowIdx >= 0) {
+                const headers = jsonData[headerRowIdx]
+                const dataRows = jsonData.slice(headerRowIdx + 1).filter(row => row && row.some(cell => cell))
+                
+                // Create table fragment
+                tempFragments.push({
+                  source: `${filename}#${sheetName}!A${headerRowIdx + 1}:${String.fromCharCode(65 + headers.length - 1)}${headerRowIdx + 1 + dataRows.length}`,
+                  table: [headers, ...dataRows]
                 })
-                currentFragment = ''
-                pageNum++
               }
             }
           })
           
-          console.log(`Extracted ${fragments.length} PDF fragments`)
-        } catch (e) {
-          console.warn('PDF parsing fallback:', e)
-          fragments.push({
-            source: `${filename}#filename`,
-            text: `Filename: ${filename}`
-          })
-        }
-        
-      } else if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
-                 mimeType === 'application/vnd.ms-excel') {
-        console.log('Parsing Excel - extracting table fragments')
-        const binaryData = Uint8Array.from(atob(file_content), c => c.charCodeAt(0))
-        const workbook = XLSX.read(binaryData, { type: 'array' })
-        
-        workbook.SheetNames.forEach((sheetName: string) => {
-          const sheet = workbook.Sheets[sheetName]
-          const jsonData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false }) as any[][]
+          console.log(`Extracted ${tempFragments.length} Excel table fragments`)
           
-          if (jsonData.length > 0) {
-            // Find header row (first non-empty row)
-            const headerRowIdx = jsonData.findIndex(row => row && row.some(cell => cell))
-            if (headerRowIdx >= 0) {
-              const headers = jsonData[headerRowIdx]
-              const dataRows = jsonData.slice(headerRowIdx + 1).filter(row => row && row.some(cell => cell))
-              
-              // Create table fragment
-              fragments.push({
-                source: `${filename}#${sheetName}!A${headerRowIdx + 1}:${String.fromCharCode(65 + headers.length - 1)}${headerRowIdx + 1 + dataRows.length}`,
-                table: [headers, ...dataRows]
-              })
-            }
+        } else if (mimeType === 'text/csv') {
+          console.log('Parsing CSV - extracting table fragment')
+          const csvText = atob(file_content)
+          const lines = csvText.split('\n').filter(l => l.trim())
+          
+          if (lines.length > 0) {
+            const table = lines.map(line => line.split(',').map(cell => cell.trim()))
+            tempFragments.push({
+              source: `${filename}#rows1-${lines.length}`,
+              table
+            })
           }
+          
+          console.log(`Extracted CSV with ${lines.length} rows`)
+          
+        } else {
+          console.warn(`Unsupported MIME type: ${mimeType}`)
+          try {
+            const text = atob(file_content)
+            tempFragments.push({
+              source: `${filename}#full`,
+              text: text.substring(0, 2000) // Limit to 2000 chars
+            })
+          } catch (e) {
+            tempFragments.push({
+              source: `${filename}#filename`,
+              text: `Filename: ${filename}, Type: ${mimeType}`
+            })
+          }
+        }
+      } catch (parseError) {
+        console.error('File parsing error:', parseError)
+        tempFragments.push({
+          source: `${filename}#error`,
+          text: `Error parsing file. Filename: ${filename}, Type: ${mimeType}`
         })
-        
-        console.log(`Extracted ${fragments.length} Excel table fragments`)
-        
-      } else if (mimeType === 'text/csv') {
-        console.log('Parsing CSV - extracting table fragment')
-        const csvText = atob(file_content)
-        const lines = csvText.split('\n').filter(l => l.trim())
-        
-        if (lines.length > 0) {
-          const table = lines.map(line => line.split(',').map(cell => cell.trim()))
-          fragments.push({
-            source: `${filename}#rows1-${lines.length}`,
-            table
-          })
-        }
-        
-        console.log(`Extracted CSV with ${lines.length} rows`)
-        
-      } else {
-        console.warn(`Unsupported MIME type: ${mimeType}`)
-        try {
-          const text = atob(file_content)
-          fragments.push({
-            source: `${filename}#full`,
-            text: text.substring(0, 2000) // Limit to 2000 chars
-          })
-        } catch (e) {
-          fragments.push({
-            source: `${filename}#filename`,
-            text: `Filename: ${filename}, Type: ${mimeType}`
-          })
-        }
       }
-    } catch (parseError) {
-      console.error('File parsing error:', parseError)
-      fragments.push({
-        source: `${filename}#error`,
-        text: `Error parsing file. Filename: ${filename}, Type: ${mimeType}`
-      })
+      
+      if (tempFragments.length === 0) {
+        console.warn('No fragments extracted, using filename')
+        tempFragments.push({
+          source: `${filename || document.filename}#filename`,
+          text: `Filename: ${filename || document.filename}`
+        })
+      }
+
+      parsedFragments = tempFragments;
+    } else {
+      return new Response(
+        JSON.stringify({ error: 'Either fragments or file_content must be provided' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
+
+    // Now parsedFragments contains the fragments to process
     
-    if (fragments.length === 0) {
-      console.warn('No fragments extracted, using filename')
-      fragments.push({
-        source: `${filename || document.filename}#filename`,
-        text: `Filename: ${filename || document.filename}`
-      })
-    }
-    
-    console.log(`Total fragments: ${fragments.length}`)
+    console.log(`Total parsed fragments: ${parsedFragments.length}`)
     
     // Assemble structured payload
     const payload = {
       doc_meta: {
-        supplier_hint: supplierHint,
-        mime: mimeType,
-        filename: filename || document.filename
+        supplier_hint: filename ? filename.split(/[_\-\.]/)[0] : null,
+        mime: mime_type,
+        filename: filename
       },
-      fragments
+      fragments: parsedFragments
     }
 
     // Call Lovable AI with structured fragments and strict extraction rules

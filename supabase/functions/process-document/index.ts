@@ -1,95 +1,146 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+type Payload = { 
+  filename: string; 
+  mime: string; 
+  size: number; 
+  file_b64: string;
+  document_id?: string;
+};
+
+interface Fragment {
+  type: 'text' | 'table';
+  content: string;
+  source: string;
+  metadata?: Record<string, any>;
 }
 
-// Mock document analysis functions (replace with actual integrations)
-class OfferComparator {
-  async calculateTCO(offerData: any): Promise<{ tco: number; breakdown: any }> {
-    const basePrice = offerData.quoted_price || 0
-    const shippingCosts = basePrice * 0.05 // 5% shipping
-    const handlingFees = Math.min(basePrice * 0.02, 500) // 2% or max $500
-    const riskPremium = offerData.risk_score ? (offerData.risk_score / 100) * basePrice * 0.1 : 0
-    const qualityAdjustment = basePrice * 0.03 // 3% quality factor
+// PDF parser - extracts text from PDF
+async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]> {
+  const fragments: Fragment[] = [];
+  
+  try {
+    // For now, we'll use a simple text extraction
+    // In production, you'd use a PDF library like pdf-parse
+    const decoder = new TextDecoder('utf-8');
+    const text = decoder.decode(bytes);
+    
+    // Extract readable text (skip binary data)
+    const textLines = text.split('\n').filter(line => {
+      const isPrintable = /^[\x20-\x7E\s]*$/.test(line);
+      return isPrintable && line.trim().length > 0;
+    });
+    
+    if (textLines.length > 0) {
+      fragments.push({
+        type: 'text',
+        content: textLines.join('\n'),
+        source: `${filename}#pdf`,
+        metadata: { pages: 1 }
+      });
+    }
+  } catch (error) {
+    console.error('PDF parsing error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to parse PDF: ${message}`);
+  }
+  
+  return fragments;
+}
 
-    const tco = basePrice + shippingCosts + handlingFees + riskPremium + qualityAdjustment
-
-    return {
-      tco: Math.round(tco * 100) / 100,
-      breakdown: {
-        quotedPrice: basePrice,
-        shippingCosts: Math.round(shippingCosts * 100) / 100,
-        handlingFees: Math.round(handlingFees * 100) / 100,
-        riskPremium: Math.round(riskPremium * 100) / 100,
-        qualityAdjustment: Math.round(qualityAdjustment * 100) / 100
+// XLSX parser - extracts tables from Excel
+async function parseXlsx(bytes: Uint8Array, filename: string): Promise<Fragment[]> {
+  const fragments: Fragment[] = [];
+  
+  try {
+    const workbook = XLSX.read(bytes, { type: 'array' });
+    
+    for (const sheetName of workbook.SheetNames) {
+      const worksheet = workbook.Sheets[sheetName];
+      const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+      
+      // Convert sheet to array of arrays
+      const data: any[][] = [];
+      for (let R = range.s.r; R <= range.e.r; R++) {
+        const row: any[] = [];
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = worksheet[cellAddress];
+          row.push(cell ? (cell.v ?? '') : '');
+        }
+        data.push(row);
+      }
+      
+      // Filter out empty rows
+      const nonEmptyData = data.filter(row => 
+        row.some(cell => cell !== null && cell !== undefined && String(cell).trim() !== '')
+      );
+      
+      if (nonEmptyData.length > 0) {
+        // Convert to markdown table format
+        const tableText = nonEmptyData.map(row => 
+          row.map(cell => String(cell || '')).join(' | ')
+        ).join('\n');
+        
+        const cellRange = `${XLSX.utils.encode_cell({ r: range.s.r, c: range.s.c })}:${XLSX.utils.encode_cell({ r: range.e.r, c: range.e.c })}`;
+        
+        fragments.push({
+          type: 'table',
+          content: tableText,
+          source: `${filename}#${sheetName}!${cellRange}`,
+          metadata: {
+            sheet: sheetName,
+            rows: nonEmptyData.length,
+            cols: range.e.c - range.s.c + 1
+          }
+        });
       }
     }
+  } catch (error) {
+    console.error('XLSX parsing error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to parse XLSX: ${message}`);
   }
+  
+  return fragments;
+}
 
-  async scoreRisk(offerData: any): Promise<{ score: number; factors: string[] }> {
-    let riskScore = 0
-    const riskFactors: string[] = []
-
-    // Check certifications
-    const certifications = offerData.certifications || []
-    if (!certifications.includes('ISO 9001')) {
-      riskScore += 25
-      riskFactors.push('Missing ISO 9001 certification')
+// CSV parser - extracts table from CSV
+async function parseCsv(bytes: Uint8Array, filename: string): Promise<Fragment[]> {
+  const fragments: Fragment[] = [];
+  
+  try {
+    const decoder = new TextDecoder('utf-8');
+    const csvText = decoder.decode(bytes);
+    
+    // Parse CSV lines
+    const lines = csvText.split('\n').filter(line => line.trim().length > 0);
+    
+    if (lines.length > 0) {
+      fragments.push({
+        type: 'table',
+        content: lines.join('\n'),
+        source: `${filename}#csv`,
+        metadata: { rows: lines.length }
+      });
     }
-
-    // Check delivery history
-    if (offerData.delivery_history === 'late') {
-      riskScore += 30
-      riskFactors.push('History of late deliveries')
-    }
-
-    // Check price discrepancy
-    const quotedTotal = offerData.quoted_total || 0
-    const lineItemTotal = offerData.line_item_total || 0
-    if (Math.abs(quotedTotal - lineItemTotal) > quotedTotal * 0.05) {
-      riskScore += 20
-      riskFactors.push('Significant price discrepancy detected')
-    }
-
-    // Geographic risk (mock)
-    if (offerData.location && ['high-risk-region'].includes(offerData.location)) {
-      riskScore += 15
-      riskFactors.push('Located in high-risk geographic region')
-    }
-
-    return {
-      score: Math.min(riskScore, 100),
-      factors: riskFactors
-    }
+  } catch (error) {
+    console.error('CSV parsing error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to parse CSV: ${message}`);
   }
-
-  async analyzeLeadTime(offerData: any): Promise<{ estimatedDays: number; factors: string[] }> {
-    let baseDays = offerData.quoted_lead_time || 14
-    const factors: string[] = []
-
-    // Adjust based on risk factors
-    if (offerData.delivery_history === 'late') {
-      baseDays += 7
-      factors.push('Historical delivery delays')
-    }
-
-    if (!offerData.certifications?.includes('ISO 9001')) {
-      baseDays += 3
-      factors.push('Quality certification requirements')
-    }
-
-    return {
-      estimatedDays: Math.max(baseDays, 1),
-      factors
-    }
-  }
+  
+  return fragments;
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -98,296 +149,191 @@ serve(async (req) => {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    );
 
-    // Get the authorization header
-    const authHeader = req.headers.get('Authorization')
+    const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: 'Authorization header required' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      );
     }
 
-    // Verify the user
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     
     if (authError || !user) {
       return new Response(
         JSON.stringify({ error: 'Invalid authorization token' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      );
     }
 
-    if (req.method === 'POST') {
-      const { document_id } = await req.json()
+    const body = await req.json() as Payload;
+    
+    // Support both old API (document_id) and new API (file_b64)
+    let filename: string;
+    let mime: string;
+    let size: number;
+    let fileBytes: Uint8Array;
+    let documentId: string;
 
-      if (!document_id) {
-        return new Response(
-          JSON.stringify({ error: 'Document ID required' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      // Get document
+    if (body.document_id) {
+      // Old API: fetch from storage
       const { data: document, error: docError } = await supabase
         .from('documents')
         .select('*')
-        .eq('id', document_id)
+        .eq('id', body.document_id)
         .eq('user_id', user.id)
-        .single()
+        .single();
 
       if (docError || !document) {
         return new Response(
           JSON.stringify({ error: 'Document not found' }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+        );
       }
 
-      // Update job status to processing
-      await supabase
-        .from('processing_jobs')
-        .update({ job_status: 'processing', progress: 10 })
-        .eq('document_id', document_id)
+      documentId = body.document_id;
+      filename = document.filename;
+      mime = document.mime_type;
+      size = document.file_size;
 
-      // Get storage path from document
-      const storagePath = document.file_path
-      
-      // Download file from storage
+      // Download from storage
       const { data: fileData, error: downloadError } = await supabase.storage
         .from('procurement-documents')
-        .download(storagePath)
+        .download(document.file_path);
 
       if (downloadError || !fileData) {
-        console.error('Storage download error:', downloadError)
-        await supabase
-          .from('processing_jobs')
-          .update({ job_status: 'failed', error_message: 'Failed to download file from storage' })
-          .eq('document_id', document_id)
-        
-        return new Response(
-          JSON.stringify({ error: 'Failed to download file from storage' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+        throw new Error('Failed to download file from storage');
       }
 
-      // Convert blob to base64 for processing
-      const arrayBuffer = await fileData.arrayBuffer()
-      const base64Content = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
-      
-      console.log('Processing file from storage:', storagePath, 'Size:', fileData.size)
-
-      // Guard: Ensure file content is not empty or too small
-      if (!base64Content || base64Content.length < 1000) {
-        console.error('Empty or too small file content received:', base64Content.length, 'bytes')
-        await supabase
-          .from('processing_jobs')
-          .update({ 
-            job_status: 'failed', 
-            error_message: `Empty file content received (${base64Content.length} bytes)` 
-          })
-          .eq('document_id', document_id)
-        
+      const arrayBuffer = await fileData.arrayBuffer();
+      fileBytes = new Uint8Array(arrayBuffer);
+    } else {
+      // New API: decode base64
+      if (!body.file_b64 || body.file_b64.length < 100) {
         return new Response(
-          JSON.stringify({ error: `Empty file content received (${base64Content.length} bytes)` }),
+          JSON.stringify({ error: 'Empty file_content (base64)' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+        );
       }
 
-      // Call document-processor to extract real vendor data using Lovable AI
-      let vendorData
-      try {
-        const processorResponse = await fetch(
-          `${Deno.env.get('SUPABASE_URL')}/functions/v1/document-processor`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': authHeader,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              document_id: document_id,
-              file_content: base64Content,
-              filename: document.filename,
-              mime_type: document.mime_type
-            })
-          }
-        )
+      filename = body.filename;
+      mime = body.mime;
+      size = body.size;
+      
+      // Decode base64 to bytes
+      fileBytes = Uint8Array.from(atob(body.file_b64), c => c.charCodeAt(0));
+      
+      console.log(`Decoded ${fileBytes.length} bytes from base64`);
 
-        if (!processorResponse.ok) {
-          const errorText = await processorResponse.text()
-          console.error('Document processor failed:', processorResponse.status, errorText)
-          throw new Error(`Document processing failed: ${processorResponse.status}`)
-        }
-
-        const processorResult = await processorResponse.json()
-        vendorData = processorResult.vendor_data
-
-        console.log('Extracted vendor data:', vendorData)
-
-      } catch (processorError) {
-        console.error('Document processor error:', processorError)
-        
-        // Fallback to basic extraction from filename if processor fails
-        vendorData = {
-          vendor_name: document.filename.replace(/\.[^/.]+$/, ''),
-          quoted_price: 50000,
-          quoted_total: 50000,
-          line_item_total: 50000,
-          items_count: 10,
-          certifications: [],
-          delivery_history: 'unknown',
-          quoted_lead_time: 30,
-          location: 'Unknown',
-          currency: 'USD'
-        }
-        
-        console.log('Using fallback vendor data due to processor error')
+      // Validation
+      if (!size || size === 0) {
+        return new Response(
+          JSON.stringify({ error: 'Empty file received' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
-      // Update progress
-      await supabase
-        .from('processing_jobs')
-        .update({ progress: 40 })
-        .eq('document_id', document_id)
+      if (size > 50 * 1024 * 1024) {
+        return new Response(
+          JSON.stringify({ error: 'File exceeds 50MB limit' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
-      // Create vendor offer with extracted data
-      const { data: vendorOffer, error: offerError } = await supabase
-        .from('vendor_offers')
+      // Create document record
+      const { data: newDoc, error: insertError } = await supabase
+        .from('documents')
         .insert({
-          document_id: document_id,
-          vendor_name: vendorData.vendor_name,
-          quoted_price: vendorData.quoted_price,
-          currency: vendorData.currency || 'USD',
-          items_count: vendorData.items_count,
-          extracted_data: {
-            ...vendorData,
-            technical_specs: vendorData.technical_specs || {},
-            issues: vendorData.issues || []
-          }
+          filename,
+          file_size: size,
+          mime_type: mime,
+          upload_status: 'processing',
+          user_id: user.id,
+          file_path: `temp/${user.id}/${Date.now()}-${filename}`
         })
         .select()
-        .single()
+        .single();
 
-      if (offerError) {
-        console.error('Vendor offer error:', offerError)
-        await supabase
-          .from('processing_jobs')
-          .update({ job_status: 'failed', error_message: 'Failed to create vendor offer' })
-          .eq('document_id', document_id)
-        
-        return new Response(
-          JSON.stringify({ error: 'Failed to process vendor data' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+      if (insertError || !newDoc) {
+        throw new Error('Failed to create document record');
       }
 
-      // Update progress
-      await supabase
-        .from('processing_jobs')
-        .update({ progress: 60 })
-        .eq('document_id', document_id)
+      documentId = newDoc.id;
+    }
 
-      // Initialize analyzer
-      const analyzer = new OfferComparator()
-
-      // Calculate risk score with real extracted data
-      const riskResult = await analyzer.scoreRisk(vendorData)
-      const { error: riskError } = await supabase
-        .from('risk_assessments')
-        .insert({
-          vendor_offer_id: vendorOffer.id,
-          risk_score: riskResult.score,
-          risk_factors: riskResult.factors,
-          assessment_data: { method: 'automated', version: '1.0' }
-        })
-
-      if (riskError) {
-        console.error('Risk assessment error:', riskError)
-      }
-
-      // Update progress
-      await supabase
-        .from('processing_jobs')
-        .update({ progress: 80 })
-        .eq('document_id', document_id)
-
-      // Calculate TCO with real extracted data (with risk score)
-      const tcoResult = await analyzer.calculateTCO({ 
-        ...vendorData, 
-        risk_score: riskResult.score 
-      })
-      
-      const { error: tcoError } = await supabase
-        .from('tco_calculations')
-        .insert({
-          vendor_offer_id: vendorOffer.id,
-          calculated_tco: tcoResult.tco,
-          breakdown: tcoResult.breakdown,
-          calculation_method: 'automated'
-        })
-
-      if (tcoError) {
-        console.error('TCO calculation error:', tcoError)
-      }
-
-      // Analyze lead time with real extracted data
-      const leadTimeResult = await analyzer.analyzeLeadTime(vendorData)
-      const { error: leadTimeError } = await supabase
-        .from('lead_time_analysis')
-        .insert({
-          vendor_offer_id: vendorOffer.id,
-          estimated_lead_time: leadTimeResult.estimatedDays,
-          confidence_level: 0.85,
-          factors: leadTimeResult.factors
-        })
-
-      if (leadTimeError) {
-        console.error('Lead time analysis error:', leadTimeError)
-      }
-
-      // Complete the job
-      const { error: finalError } = await supabase
-        .from('processing_jobs')
-        .update({ 
-          job_status: 'completed', 
-          progress: 100,
-          result_data: {
-            vendor_offer_id: vendorOffer.id,
-            processing_complete: true
-          }
-        })
-        .eq('document_id', document_id)
-
-      if (finalError) {
-        console.error('Job completion error:', finalError)
-      }
-
+    // Parse file based on MIME type
+    let fragments: Fragment[];
+    
+    if (mime === 'application/pdf') {
+      fragments = await parsePdf(fileBytes, filename);
+    } else if (mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+      fragments = await parseXlsx(fileBytes, filename);
+    } else if (mime === 'application/vnd.ms-excel') {
+      fragments = await parseXlsx(fileBytes, filename);
+    } else if (mime === 'text/csv') {
+      fragments = await parseCsv(fileBytes, filename);
+    } else {
       return new Response(
-        JSON.stringify({
-          job_id: document_id,
-          status: 'completed',
-          vendor_offer_id: vendorOffer.id,
-          message: 'Document processed successfully'
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      )
+        JSON.stringify({ error: `Unsupported MIME type: ${mime}` }),
+        { status: 415, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!fragments || fragments.length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'No text/tables extracted from document' }),
+        { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`Extracted ${fragments.length} fragments from ${filename}`);
+
+    // Call document-processor with structured fragments
+    const processorResponse = await fetch(
+      `${Deno.env.get('SUPABASE_URL')}/functions/v1/document-processor`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify({
+          document_id: documentId,
+          filename,
+          mime_type: mime,
+          fragments
+        })
+      }
+    );
+
+    const parsed = await processorResponse.json();
+    
+    if (!processorResponse.ok) {
+      throw new Error(`document-processor: ${processorResponse.status} ${JSON.stringify(parsed)}`);
     }
 
     return new Response(
-      JSON.stringify({ error: 'Method not allowed' }),
-      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+      JSON.stringify({ 
+        job_id: documentId,
+        status: 'completed',
+        message: 'Document processed successfully',
+        parsed 
+      }),
+      { 
+        status: 200, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
 
   } catch (error) {
-    console.error('Function error:', error)
+    console.error('process-document error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
+      JSON.stringify({ error: `process-document error: ${message}` }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    );
   }
-})
+});
