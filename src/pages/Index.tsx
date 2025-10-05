@@ -1,11 +1,13 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, BarChart3, Brain, CheckCircle } from "lucide-react";
+import { Upload, BarChart3, Brain, CheckCircle, LogIn, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import DocumentUpload from "@/components/DocumentUpload";
 import VendorDashboard from "@/components/VendorDashboard";
 import AdvancedDocumentDemo from "@/components/AdvancedDocumentDemo";
 import { Button } from "@/components/ui/button";
 import ChatAssistant from "@/components/ChatAssistant";
+import AuthButtons from '@/components/AuthButtons';
+import AuthStateInit from '@/components/AuthStateInit';
 
 const Index = () => {
   const navigate = useNavigate();
@@ -16,10 +18,13 @@ const Index = () => {
       <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-foreground">ClarityChain AI</h1>
-          <Button variant="outline" onClick={() => navigate("/approval-workflow")}>
-            <CheckCircle className="h-4 w-4 mr-2" />
-            Approval Workflow
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => navigate('/approval-workflow')}>
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Approval Workflow
+            </Button>
+            <AuthButtons />
+          </div>
         </div>
       </header>
 
@@ -74,6 +79,7 @@ const Index = () => {
       </main>
       
       <ChatAssistant />
+      <AuthStateInit />
     </div>
   );
 };
