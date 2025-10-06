@@ -244,6 +244,22 @@ serve(async (req) => {
       
       console.log(`Decoded ${fileBytes.length} bytes from base64`);
 
+      // Validate decoded bytes
+      if (!fileBytes.length) {
+        return new Response(
+          JSON.stringify({ error: 'Decoded file is empty' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // PDF-specific validation: check for %PDF header
+      if (mime === 'application/pdf' && fileBytes[0] !== 0x25 /* '%' */) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid PDF bytes (missing %PDF header).' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       // Validation
       if (!size || size === 0) {
         return new Response(
