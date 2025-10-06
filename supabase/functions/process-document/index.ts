@@ -44,7 +44,7 @@ async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]
 
     const pdf = await (pdfjsLib as any).getDocument({ 
       data: bytes, 
-      useWorker: false,
+      disableWorker: true,
       isEvalSupported: false,
       useSystemFonts: true
     }).promise;
