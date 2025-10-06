@@ -31,17 +31,128 @@ const VendorDashboard: React.FC = () => {
     setIsProcessing(true);
     try {
       // Extract File objects from uploaded items
-      const files = uploadedFiles.map((item: any) => item?.file ?? item);
-      
-      // Process all files using ingest service
-      const results = await processFiles(files);
-      console.log('Ingest results:', results);
-      
-      // For now, show mock data - TODO: integrate with real extraction
-      const mockResults = getMockProcessingResults();
-      setVendorResults(mockResults.results);
-      setSelectedVendor(null);
+      const files: File[] = uploadedFiles.map((item: any) => item?.file ?? item);
 
+      // Process all files using ingest service
+      const results: any[] = await processFiles(files);
+      console.log('Ingest results:', results);
+
+      // Heuristic mapping of extracted fragments -> VendorData (one vendor per file)
+      const candidateVendors = files.map((file, idx) => {
+        const result = results[idx] || {};
+        const fragments: any[] = Array.isArray(result?.fragments) ? result.fragments : [];
+
+        const texts: string[] = [];
+        const nums: number[] = [];
+        const currenciesSeen = new Set<string>();
+
+        const pushNum = (n: any) => {
+          if (typeof n === 'number' && isFinite(n)) nums.push(n);
+          else if (typeof n === 'string') {
+            const cleaned = n.replace(/[^0-9.,\-]/g, '');
+            if (!cleaned) return;
+            let val = cleaned;
+            if (val.includes('.') && val.includes(',')) val = val.replace(/,/g, '');
+            else if (val.includes(',') && !val.includes('.')) val = val.replace(/,/g, '');
+            const parsed = parseFloat(val);
+            if (!isNaN(parsed) && isFinite(parsed)) nums.push(parsed);
+          }
+        };
+
+        for (const f of fragments) {
+          if (f?.text) {
+            const t = String(f.text);
+            texts.push(t);
+            if (/[€]/.test(t)) currenciesSeen.add('EUR');
+            if (/\bUSD\b|\$/i.test(t)) currenciesSeen.add('USD');
+            if (/\bNOK\b/i.test(t)) currenciesSeen.add('NOK');
+            // extract obvious big numbers
+            for (const m of t.matchAll(/[-+]?\d[\d.,]{3,}/g)) pushNum(m[0]);
+          }
+          if (Array.isArray(f?.table)) {
+            for (const row of f.table as any[]) {
+              for (const cell of row as any[]) pushNum(cell);
+            }
+          }
+        }
+
+        const currency = currenciesSeen.has('EUR') ? 'EUR' : currenciesSeen.has('NOK') ? 'NOK' : currenciesSeen.has('USD') ? 'USD' : 'EUR';
+        const priceCandidates = nums.filter(n => Math.abs(n) >= 1000).sort((a,b)=>b-a);
+        const quotedPrice = priceCandidates[0] ? Math.abs(priceCandidates[0]) : 0;
+
+        // Lead time detection (weeks/days)
+        let leadDays = 0;
+        const bigText = texts.join(' \n ');
+        const weeksMatch = bigText.match(/(\d{1,3})\s*(weeks|week|wks|wk)/i);
+        const daysMatch = bigText.match(/(\d{1,3})\s*(days|day)/i);
+        if (weeksMatch) leadDays = parseInt(weeksMatch[1], 10) * 7;
+        else if (daysMatch) leadDays = parseInt(daysMatch[1], 10);
+        if (!leadDays) leadDays = 280; // default 40 weeks if absent
+
+        return {
+          fileName: file.name,
+          fragmentsCount: fragments.length,
+          nums,
+          currency,
+          quotedPrice,
+          leadDays,
+        };
+      });
+
+      // Normalize across vendors for risk and TCO
+      const prices = candidateVendors.map(v => v.quotedPrice || 0);
+      const leads = candidateVendors.map(v => v.leadDays || 0);
+      const minP = Math.min(...prices.filter(p=>p>0), Number.POSITIVE_INFINITY);
+      const maxP = Math.max(...prices, 0);
+      const minL = Math.min(...leads.filter(l=>l>0), Number.POSITIVE_INFINITY);
+      const maxL = Math.max(...leads, 0);
+      const norm = (v: number, min: number, max: number) => (max > min ? (v - min) / (max - min) : 0);
+
+      const vendors: VendorData[] = candidateVendors.map((v, i) => {
+        const vendorName = v.fileName.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+        const price = v.quotedPrice || 0;
+        const ship = Math.round(price * 0.02);
+        const handling = Math.round(price * 0.015);
+        const riskPremium = Math.round(price * (0.01 + norm(v.leadDays, minL, maxL) * 0.02));
+        const qualityAdjustment = 0;
+        const calculatedTCO = Math.round(price + ship + handling + riskPremium + qualityAdjustment);
+        const riskScore = Math.min(95, Math.max(5, Math.round(20 + norm(price, minP, maxP) * 50 + norm(v.leadDays, minL, maxL) * 30)));
+
+        const issues: string[] = [];
+        if (!price) issues.push('No clear total price detected in the document');
+        if (v.fragmentsCount === 0) issues.push('No extractable content was found');
+
+        return {
+          id: `vendor-${i}`,
+          vendorName,
+          quotedPrice: price,
+          calculatedTCO,
+          leadTime: v.leadDays,
+          riskScore,
+          items: 1,
+          currency: v.currency,
+          riskFactors: [
+            `Price normalization factor: ${(norm(price, minP, maxP) * 100).toFixed(0)}%`,
+            `Lead time: ${v.leadDays} days`,
+          ],
+          tcoBreakdown: {
+            quotedPrice: price,
+            shippingCosts: ship,
+            handlingFees: handling,
+            riskPremium,
+            qualityAdjustment,
+          },
+          issues,
+        } as VendorData;
+      });
+
+      if (!vendors.length) {
+        toast.error('No usable data extracted from the uploaded files');
+        return;
+      }
+
+      setVendorResults(vendors);
+      setSelectedVendor(null);
       toast.success(`Successfully processed ${files.length} document${files.length > 1 ? 's' : ''}`);
     } catch (error) {
       console.error('Processing error:', error);
