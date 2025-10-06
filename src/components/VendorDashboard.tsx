@@ -7,6 +7,7 @@ import { FileText, BarChart3, Trophy, AlertTriangle, TrendingDown, Download } fr
 import { toast } from "sonner";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import MultiFileUpload from './MultiFileUpload';
 import VendorComparisonTable, { VendorData } from './VendorComparisonTable';
 import { processFiles } from '@/services/ingest';
@@ -559,6 +560,84 @@ const VendorDashboard: React.FC = () => {
             </Card>
           ) : (
             <div className="space-y-6">
+              {/* Charts Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* TCO Comparison Chart */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5" />
+                      TCO Comparison
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={vendorResults.map(v => ({
+                        name: v.vendorName.length > 15 ? v.vendorName.substring(0, 15) + '...' : v.vendorName,
+                        tco: v.calculatedTCO,
+                        quotedPrice: v.quotedPrice
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
+                        <YAxis />
+                        <Tooltip 
+                          formatter={(value: number) => `$${value.toLocaleString()}`}
+                          labelStyle={{ color: 'hsl(var(--foreground))' }}
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--background))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="quotedPrice" fill="hsl(var(--primary))" name="Quoted Price" />
+                        <Bar dataKey="tco" fill="hsl(var(--azure))" name="Total TCO" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                {/* Risk Score Chart */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5" />
+                      Risk Score Comparison
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <RadarChart data={vendorResults.map(v => ({
+                        vendor: v.vendorName.length > 12 ? v.vendorName.substring(0, 12) + '...' : v.vendorName,
+                        riskScore: v.riskScore,
+                      }))}>
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="vendor" />
+                        <PolarRadiusAxis angle={90} domain={[0, 100]} />
+                        <Radar 
+                          name="Risk Score" 
+                          dataKey="riskScore" 
+                          stroke="hsl(var(--destructive))" 
+                          fill="hsl(var(--destructive))" 
+                          fillOpacity={0.6} 
+                        />
+                        <Tooltip 
+                          formatter={(value: number) => `${value}/100`}
+                          labelStyle={{ color: 'hsl(var(--foreground))' }}
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--background))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Vendor Comparison Table */}
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
