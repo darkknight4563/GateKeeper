@@ -35,34 +35,34 @@ interface Fragment {
 
 // PDF parser - extracts text from PDF using pdfjs in no-worker mode
 async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]> {
-  const fragments: Fragment[] = [];
-  
-  try {
-    const loadingTask = (pdfjsLib as any).getDocument({ data: bytes, useWorker: false });
-    const pdf = await loadingTask.promise;
-    
-    for (let p = 1; p <= pdf.numPages; p++) {
-      const page = await pdf.getPage(p);
-      const content = await page.getTextContent();
-      // @ts-ignore
-      const text = content.items.map((i: any) => i.str).join(' ').replace(/\s+/g, ' ').trim();
-      
-      if (text.length > 0) {
-        fragments.push({
-          type: 'text',
-          content: text,
-          source: `${filename}#p${p}`,
-          metadata: { page: p }
-        });
-      }
-    }
-  } catch (error) {
-    console.error('PDF parsing error:', error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to parse PDF: ${message}`);
+  // Disable worker in Edge/Deno
+  const loadingTask = pdfjsLib.getDocument({ data: bytes, useWorker: false });
+  const pdf = await loadingTask.promise;
+
+  const out: Array<{ source: string; text: string }> = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const text = content.items
+      .map((i: any) => i.str)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (text.length > 0) out.push({ source: `${filename}#p${p}`, text });
+  }
+
+  // Fallback: if still empty, tell the truth so users know they need OCR
+  if (out.length === 0) {
+    throw new Error("PDF has no extractable text (likely scanned/image); enable OCR or upload a text-based PDF.");
   }
   
-  return fragments;
+  // Convert to Fragment format
+  return out.map(item => ({
+    type: 'text' as const,
+    content: item.text,
+    source: item.source,
+    metadata: { page: parseInt(item.source.split('#p')[1]) }
+  }));
 }
 
 // XLSX parser - extracts tables from Excel
