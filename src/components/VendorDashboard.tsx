@@ -770,6 +770,37 @@ const VendorDashboard: React.FC = () => {
                 </Alert>
               )}
               
+              {/* Data Gaps & Alerts Counter */}
+              {uploadedFiles.length > 0 && (uploadedFiles.some(f => f.dataGaps?.length > 0 || f.alerts?.length > 0)) && (
+                <Alert className="bg-warning/10 border-warning">
+                  <AlertTriangle className="h-4 w-4 text-warning" />
+                  <AlertDescription>
+                    <div className="space-y-2">
+                      <div className="font-semibold text-warning">
+                        {uploadedFiles.reduce((count, f) => count + (f.dataGaps?.length || 0), 0)} data gap(s), {' '}
+                        {uploadedFiles.reduce((count, f) => count + (f.alerts?.length || 0), 0)} alert(s) detected
+                      </div>
+                      <div className="text-xs space-y-1">
+                        {uploadedFiles.map((file, idx) => {
+                          const gaps = file.dataGaps?.length || 0;
+                          const alerts = file.alerts?.length || 0;
+                          if (gaps === 0 && alerts === 0) return null;
+                          
+                          return (
+                            <div key={idx} className="text-muted-foreground">
+                              <span className="font-medium">{file.file?.name || `File ${idx + 1}`}:</span>
+                              {gaps > 0 && <span className="ml-1">{gaps} gap{gaps > 1 ? 's' : ''}</span>}
+                              {gaps > 0 && alerts > 0 && <span>, </span>}
+                              {alerts > 0 && <span>{alerts} alert{alerts > 1 ? 's' : ''}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               {/* AI Insight Summary */}
               {aiInsightSummary && (
                 <Card className="bg-gradient-to-r from-primary/5 to-azure/5 border-primary/20">
