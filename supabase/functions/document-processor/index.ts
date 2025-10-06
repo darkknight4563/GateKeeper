@@ -493,19 +493,23 @@ Return ONLY valid JSON matching the schema above. No markdown, no explanations.`
     const technicalSpecs = extractedData.technical_specs || {}
     const certifications = extractedData.certifications || []
     const issues: string[] = []
+    const clarifications: string[] = []
     
-    // Validate critical fields for pipeline
+    // Validate critical fields and track clarifications needed
     if (!extractedData.terms?.delivery_weeks) {
       issues.push("Delivery time not specified")
+      clarifications.push("delivery_weeks: Please provide the delivery time in weeks")
     }
     if (!extractedData.terms?.warranty_months) {
       issues.push("Warranty information not specified")
+      clarifications.push("warranty_months: Please specify the warranty period in months")
     }
     if (!certifications || certifications.length === 0) {
       issues.push("ISO certification not mentioned")
     }
     if (!extractedData.terms?.payment) {
       issues.push("Payment terms not specified")
+      clarifications.push("payment_terms: Please provide the payment terms (e.g., Net 30, advance payment)")
     }
     
     // Prepare vendor offer data with all required fields
@@ -548,7 +552,8 @@ Return ONLY valid JSON matching the schema above. No markdown, no explanations.`
       quoted_total: totalPrice,
       line_item_total: totalPrice,
       technical_specs: technicalSpecs,
-      issues: issues
+      issues: issues,
+      clarifications: clarifications
     }
     
     console.log('=== VENDOR DATA PROCESSED ===')
