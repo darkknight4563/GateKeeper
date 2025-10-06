@@ -298,6 +298,14 @@ serve(async (req) => {
       const leadTime = doc.delivery_weeks || doc.terms?.delivery_weeks || doc.lead_time || null;
       const leadTimeSource = doc.terms?.source || doc.source || '[Unknown]';
 
+      // Extract technical specs from document-processor output
+      const technicalSpecs = doc.technical_specs || vendorBom?.specs || {};
+      const technicalSources = vendorBom?.sources || {};
+      const technicalConflicts = vendorBom?.conflicts || null;
+
+      // Extract clarifications (missing fields)
+      const clarifications = doc.clarifications || [];
+
       return {
         supplier: doc.supplier || doc.supplier_name,
         quoted_price: quotedPrice,
@@ -316,7 +324,11 @@ serve(async (req) => {
         risk_explanation: vendorScore?.explanation || '[Data Gap: No risk analysis generated]',
         what_lowers_risk: vendorScore?.what_lowers_risk || '[Data Gap: No recommendations generated]',
         issues: vendorIssues,
+        clarifications: clarifications,
         bom: vendorBom,
+        technical_specs: technicalSpecs,
+        technical_sources: technicalSources,
+        technical_conflicts: technicalConflicts,
         source: doc.source || '[Unknown]'
       };
     });
@@ -418,43 +430,56 @@ ${hasFactors ? v.risk_factors.map((f: any) => {
 
 ---
 
-## ⚠️ Issues & Clarifications
+## ⚠️ Issues & Clarifications Needed
 
 ${vendors.length === 0 ? '[Data Gap: No vendor data available]' : ''}
 ${vendors.map((v: any) => {
-  if (!v.issues || v.issues.length === 0) {
-    return `### ${v.supplier}\n\n✅ No critical issues identified.`;
+  const hasIssues = v.issues && v.issues.length > 0;
+  const hasClarifications = v.clarifications && v.clarifications.length > 0;
+  
+  if (!hasIssues && !hasClarifications) {
+    return `### ${v.supplier}\n\n✅ No critical issues or missing data identified.`;
   }
   
-  // Group issues by severity
-  const highIssues = v.issues.filter((i: any) => i.severity === 'High');
-  const mediumIssues = v.issues.filter((i: any) => i.severity === 'Medium');
-  const lowIssues = v.issues.filter((i: any) => i.severity === 'Low');
+  let output = `### ${v.supplier}\n\n`;
   
-  return `### ${v.supplier}
-
-**Summary:** ${highIssues.length} High | ${mediumIssues.length} Medium | ${lowIssues.length} Low
-
-${v.issues.map((issue: any) => 
-  `${getSeverityIcon(issue.severity)} **${issue.title}** (${issue.severity})
+  // Add clarifications section (missing fields)
+  if (hasClarifications) {
+    output += `#### 📋 Missing Information\n\nThe following fields are missing and need clarification:\n\n`;
+    output += v.clarifications.map((field: string) => `- **${field}**: Not specified in the submitted documents`).join('\n');
+    output += '\n\n';
+  }
+  
+  // Add issues section
+  if (hasIssues) {
+    const highIssues = v.issues.filter((i: any) => i.severity === 'High');
+    const mediumIssues = v.issues.filter((i: any) => i.severity === 'Medium');
+    const lowIssues = v.issues.filter((i: any) => i.severity === 'Low');
+    
+    output += `#### ⚠️ Identified Issues\n\n**Summary:** ${highIssues.length} High | ${mediumIssues.length} Medium | ${lowIssues.length} Low\n\n`;
+    output += v.issues.map((issue: any) => 
+      `${getSeverityIcon(issue.severity)} **${issue.title}** (${issue.severity})
 - **Detail:** ${issue.detail}
 - **Source:** ${issue.source}
 - **Suggested Question:** *"${issue.suggested_question}"*`
-).join('\n\n')}`;
+    ).join('\n\n');
+  }
+  
+  return output;
 }).join('\n\n---\n\n')}
 
 ---
 
-## 🔧 Technical Specifications (BOM)
+## 🔧 Technical Specifications
 
-${vendors.length === 0 || vendors.every((v: any) => !v.bom || !v.bom.specs) ? '[Data Gap: No BOM data extracted. Run /bom first.]' : ''}
+${vendors.length === 0 || vendors.every((v: any) => !v.technical_specs || Object.keys(v.technical_specs).length === 0) ? '[Data Gap: No technical specifications extracted from documents.]' : ''}
 
-${vendors.some((v: any) => v.bom && v.bom.specs) ? `
+${vendors.some((v: any) => v.technical_specs && Object.keys(v.technical_specs).length > 0) ? `
 | Supplier | Tubes | Fibers | Outer Diameter | Weight | Bend Radius | Length | Standards | Certifications |
 |----------|-------|--------|----------------|--------|-------------|--------|-----------|----------------|
 ${vendors.map((v: any) => {
-  const specs = v.bom?.specs || {};
-  const sources = v.bom?.sources || {};
+  const specs = v.technical_specs || {};
+  const sources = v.technical_sources || {};
   
   const tubesCell = specs.tubes !== null && specs.tubes !== undefined 
     ? `${specs.tubes}${sources.tubes ? ` {${sources.tubes}}` : ''}` 
@@ -484,11 +509,11 @@ ${vendors.map((v: any) => {
   return `| ${v.supplier} | ${tubesCell} | ${fibersCell} | ${odCell} | ${weightCell} | ${bendCell} | ${lengthCell} | ${standardsCell} | ${certsCell} |`;
 }).join('\n')}` : ''}
 
-${vendors.some((v: any) => v.bom?.conflicts && Object.keys(v.bom.conflicts).length > 0) ? `
+${vendors.some((v: any) => v.technical_conflicts && Object.keys(v.technical_conflicts).length > 0) ? `
 ### ⚠️ Conflicting Data Detected
 
-${vendors.filter((v: any) => v.bom?.conflicts && Object.keys(v.bom.conflicts).length > 0).map((v: any) => `**${v.supplier}:**
-${Object.entries(v.bom.conflicts).map(([field, values]: [string, any]) => 
+${vendors.filter((v: any) => v.technical_conflicts && Object.keys(v.technical_conflicts).length > 0).map((v: any) => `**${v.supplier}:**
+${Object.entries(v.technical_conflicts).map(([field, values]: [string, any]) => 
   `- **${field}**: ${Array.isArray(values) ? values.join(' vs ') : values}`
 ).join('\n')}`).join('\n\n')}
 
@@ -542,13 +567,14 @@ ${Object.entries(v.bom.conflicts).map(([field, values]: [string, any]) =>
       })),
       issues_and_clarifications: vendors.map((v: any) => ({
         supplier: v.supplier,
-        issues: v.issues
+        issues: v.issues,
+        clarifications: v.clarifications
       })),
       technical_specifications: vendors.map((v: any) => ({
         supplier: v.supplier,
-        specs: v.bom?.specs || {},
-        sources: v.bom?.sources || {},
-        conflicts: v.bom?.conflicts || null
+        specs: v.technical_specs || {},
+        sources: v.technical_sources || {},
+        conflicts: v.technical_conflicts || null
       })),
       summary_statistics: {
         total_vendors: vendors.length,
