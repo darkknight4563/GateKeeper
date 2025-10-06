@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
-import { getDocument } from "https://esm.sh/pdfjs-dist@4.3.136/legacy/build/pdf.mjs";
+import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.3.136/legacy/build/pdf.mjs";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') ?? '*',
@@ -31,9 +31,15 @@ async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]
     console.log(`PDF bytes received: ${bytes.length}`)
     
     // Disable worker in Edge/Deno - use legacy build and no worker
-    const pdf = await (getDocument as any)({ 
+    // Explicitly disable worker to avoid GlobalWorkerOptions requirement
+    ;(pdfjsLib as any).GlobalWorkerOptions = (pdfjsLib as any).GlobalWorkerOptions || {}
+    ;(pdfjsLib as any).GlobalWorkerOptions.workerSrc = undefined
+
+    const pdf = await (pdfjsLib as any).getDocument({ 
       data: bytes, 
-      useWorker: false
+      useWorker: false,
+      isEvalSupported: false,
+      useSystemFonts: true
     }).promise;
 
     console.log(`PDF loaded successfully: ${pdf.numPages} pages`)
