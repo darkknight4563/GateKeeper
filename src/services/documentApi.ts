@@ -130,24 +130,6 @@ class DocumentAPI {
     return response.json();
   }
 
-  async processDocument(documentId: string): Promise<{ job_id: string; status: string; message: string }> {
-    const headers = await this.getAuthHeaders();
-
-    const response = await fetch(`${this.baseUrl}/process-document`, {
-      method: 'POST',
-      mode: 'cors',
-      credentials: 'omit',
-      headers,
-      body: JSON.stringify({ document_id: documentId })
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `Processing failed: ${response.statusText}`);
-    }
-
-    return response.json();
-  }
 
   async getResults(jobId: string): Promise<ProcessingResults> {
     const headers = await this.getAuthHeaders();

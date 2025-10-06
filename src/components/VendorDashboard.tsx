@@ -9,7 +9,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import MultiFileUpload from './MultiFileUpload';
 import VendorComparisonTable, { VendorData } from './VendorComparisonTable';
-import { documentApi } from '@/services/documentApi';
+import { processFiles } from '@/services/ingest';
 import { getMockProcessingResults } from '@/services/mockVendorData';
 
 const VendorDashboard: React.FC = () => {
@@ -30,29 +30,19 @@ const VendorDashboard: React.FC = () => {
 
     setIsProcessing(true);
     try {
-      // 1) Upload all files
-      const uploads = await Promise.all(
-        uploadedFiles.map(async (item: any) => {
-          const file: File = item?.file ?? item; // tolerate different shapes
-          return documentApi.uploadDocument(file);
-        })
-      );
-
-      // 2) Start processing for each uploaded document
-      const jobs = await Promise.all(
-        uploads.map((u) => documentApi.processDocument(u.id))
-      );
-
-      // 3) Poll all jobs until completion and merge results
-      const results = await Promise.all(
-        jobs.map((j) => documentApi.pollJobStatus(j.job_id))
-      );
-
-      const mergedVendors = results.flatMap((r) => r.results || []);
-      setVendorResults(mergedVendors);
+      // Extract File objects from uploaded items
+      const files = uploadedFiles.map((item: any) => item?.file ?? item);
+      
+      // Process all files using ingest service
+      const results = await processFiles(files);
+      console.log('Ingest results:', results);
+      
+      // For now, show mock data - TODO: integrate with real extraction
+      const mockResults = getMockProcessingResults();
+      setVendorResults(mockResults.results);
       setSelectedVendor(null);
 
-      toast.success(`Successfully processed ${uploads.length} document${uploads.length > 1 ? 's' : ''}`);
+      toast.success(`Successfully processed ${files.length} document${files.length > 1 ? 's' : ''}`);
     } catch (error) {
       console.error('Processing error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to process documents');
