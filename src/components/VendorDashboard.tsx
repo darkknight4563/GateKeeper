@@ -917,6 +917,106 @@ const VendorDashboard: React.FC = () => {
                 </Card>
               </div>
 
+              {/* Technical Specifications Section */}
+              {vendorResults.some(v => v.technicalSpecs && Object.keys(v.technicalSpecs).length > 0) && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Technical Specifications
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-6">
+                      {vendorResults.map((vendor, idx) => {
+                        const specs = vendor.technicalSpecs;
+                        if (!specs || Object.keys(specs).length === 0) return null;
+
+                        return (
+                          <div key={idx} className="border-b border-border pb-4 last:border-b-0 last:pb-0">
+                            <h4 className="font-semibold text-foreground mb-3">{vendor.vendorName}</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {specs.tubes && (
+                                <div className="bg-muted/50 p-3 rounded-lg">
+                                  <p className="text-xs text-muted-foreground">Tubes</p>
+                                  <p className="font-semibold text-foreground">{specs.tubes}</p>
+                                </div>
+                              )}
+                              {specs.fibers && (
+                                <div className="bg-muted/50 p-3 rounded-lg">
+                                  <p className="text-xs text-muted-foreground">Fibers</p>
+                                  <p className="font-semibold text-foreground">{specs.fibers}</p>
+                                </div>
+                              )}
+                              {specs.outerDiameter && (
+                                <div className="bg-muted/50 p-3 rounded-lg">
+                                  <p className="text-xs text-muted-foreground">Outer Diameter</p>
+                                  <p className="font-semibold text-foreground">{specs.outerDiameter}</p>
+                                </div>
+                              )}
+                              {specs.weight && (
+                                <div className="bg-muted/50 p-3 rounded-lg">
+                                  <p className="text-xs text-muted-foreground">Weight</p>
+                                  <p className="font-semibold text-foreground">{specs.weight}</p>
+                                </div>
+                              )}
+                              {specs.bendRadius && (
+                                <div className="bg-muted/50 p-3 rounded-lg">
+                                  <p className="text-xs text-muted-foreground">Bend Radius</p>
+                                  <p className="font-semibold text-foreground">{specs.bendRadius}</p>
+                                </div>
+                              )}
+                              {specs.length && (
+                                <div className="bg-muted/50 p-3 rounded-lg">
+                                  <p className="text-xs text-muted-foreground">Length</p>
+                                  <p className="font-semibold text-foreground">{specs.length}</p>
+                                </div>
+                              )}
+                              {specs.specification && (
+                                <div className="bg-muted/50 p-3 rounded-lg">
+                                  <p className="text-xs text-muted-foreground">Specification</p>
+                                  <p className="font-semibold text-foreground">{specs.specification}</p>
+                                </div>
+                              )}
+                              {specs.certification && (
+                                <div className="bg-muted/50 p-3 rounded-lg">
+                                  <p className="text-xs text-muted-foreground">Certification</p>
+                                  <p className="font-semibold text-foreground">{specs.certification}</p>
+                                </div>
+                              )}
+                            </div>
+                            {(specs.standards && specs.standards.length > 0) && (
+                              <div className="mt-3">
+                                <p className="text-xs text-muted-foreground mb-1">Standards</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {specs.standards.map((std: string, i: number) => (
+                                    <span key={i} className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-md">
+                                      {std}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {(specs.certifications && specs.certifications.length > 0) && (
+                              <div className="mt-3">
+                                <p className="text-xs text-muted-foreground mb-1">Certifications</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {specs.certifications.map((cert: string, i: number) => (
+                                    <span key={i} className="px-2 py-1 bg-success/10 text-success text-xs rounded-md">
+                                      {cert}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Vendor Comparison Table */}
               <Card>
                 <CardHeader>

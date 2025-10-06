@@ -34,6 +34,8 @@ export interface VendorData {
     length?: string;
     specification?: string;
     certification?: string;
+    standards?: string[];
+    certifications?: string[];
   };
   issues?: string[];
 }

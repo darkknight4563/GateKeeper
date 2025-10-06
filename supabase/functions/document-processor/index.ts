@@ -289,6 +289,7 @@ CRITICAL RULES:
 2. **MANDATORY SOURCE TRACKING**: Every numeric field (delivery_weeks, warranty_months, unit_price, subtotal, quoted_price) MUST include a "source" field copied from the corresponding fragment.source
 3. **DATA GAPS**: If you cannot find a value in any fragment, set it to null and add a note: "[Data Gap] field-name not found in fragments"
 4. **DO NOT INFER**: Do not calculate, estimate, or fabricate any values
+5. **BOM PARSING**: Extract technical specifications from table headers/rows (tubes, fibers, OD, length, standards, certifications)
 
 STRUCTURED PAYLOAD:
 ${JSON.stringify(payload, null, 2)}
@@ -318,6 +319,17 @@ REQUIRED OUTPUT SCHEMA:
       "totals": {
         "quoted_price": <number|null>,
         "source": "<source from fragment - REQUIRED if quoted_price is not null>"
+      },
+      "technical_specs": {
+        "tubes": <number|null>,
+        "fibers": <number|null>,
+        "outer_diameter": "<string|null>",
+        "weight": "<string|null>",
+        "bend_radius": "<string|null>",
+        "length": "<string|null>",
+        "standards": ["<standard1>", "<standard2>"],
+        "certifications": ["<cert1>", "<cert2>"],
+        "source": "<source from fragment>"
       }
     }
   ],
@@ -330,10 +342,12 @@ REQUIRED OUTPUT SCHEMA:
 CONVERSION RULES (only apply if data is explicitly present):
 - Delivery: "3 months" → 12-13 weeks, "45 days" → ~6 weeks
 - Warranty: "2 years" → 24 months, "52 weeks" → 12 months
+- Technical specs: Look for "tubes", "fibers", "OD", "diameter", "length", "ISO", "API" in table headers/cells
 
 EXAMPLES:
 ✅ CORRECT: "unit_price": 1500, "source": "offer.pdf#p2"
 ✅ CORRECT: "delivery_weeks": 34, "source_terms": "Philips.xlsx#Sheet1!B5"
+✅ CORRECT: "technical_specs": {"tubes": 12, "fibers": 144, "outer_diameter": "15.5mm", "source": "spec.xlsx#Sheet1"}
 ✅ CORRECT: "warranty_months": null (when not in fragments, add note)
 
 ❌ WRONG: "delivery_weeks": 8 (when not in fragments - this is hallucination)
@@ -482,8 +496,8 @@ Return ONLY valid JSON matching the schema above. No markdown, no explanations.`
         warranty_months: firstDoc.terms?.warranty_months,
         source: firstDoc.terms?.source_terms
       },
-      technical_specs: null,
-      certifications: []
+      technical_specs: firstDoc.technical_specs || null,
+      certifications: firstDoc.technical_specs?.certifications || []
     }
     
     // Calculate totals from the extracted items
