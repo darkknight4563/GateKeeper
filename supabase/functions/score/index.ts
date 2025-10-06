@@ -126,7 +126,11 @@ serve(async (req) => {
         factor: "Schedule",
         weight: riskWeights.schedule,
         subscore: scheduleScore,
-        evidence: scheduleEvidence
+        evidence: scheduleEvidence,
+        points: scheduleScore !== null ? (scheduleScore * riskWeights.schedule).toFixed(2) : null,
+        description: scheduleScore !== null 
+          ? `${deliveryWeeks} weeks delivery time (${scheduleScore <= 3 ? 'Low' : scheduleScore <= 6 ? 'Medium' : 'High'} risk)`
+          : "Delivery time not specified"
       });
 
       // 2. Price Variance Risk
@@ -151,7 +155,11 @@ serve(async (req) => {
         factor: "Price variance",
         weight: riskWeights.price_variance,
         subscore: priceVarianceScore,
-        evidence: priceEvidence
+        evidence: priceEvidence,
+        points: priceVarianceScore !== null ? (priceVarianceScore * riskWeights.price_variance).toFixed(2) : null,
+        description: priceVarianceScore !== null 
+          ? `${((Math.abs(quotedPrice - benchmarkPrice!) / benchmarkPrice!) * 100).toFixed(1)}% from benchmark (${priceVarianceScore <= 3 ? 'Low' : priceVarianceScore <= 6 ? 'Medium' : 'High'} variance)`
+          : "Price not available for comparison"
       });
 
       // 3. Quality Certification Risk
@@ -183,7 +191,11 @@ serve(async (req) => {
         factor: "Quality certification",
         weight: riskWeights.quality_cert,
         subscore: qualityCertScore,
-        evidence: qualityEvidence
+        evidence: qualityEvidence,
+        points: qualityCertScore !== null ? (qualityCertScore * riskWeights.quality_cert).toFixed(2) : null,
+        description: hasISO 
+          ? "ISO/API certification found (Low risk)"
+          : "No ISO/API certification found (High risk)"
       });
 
       // 4. Warranty Terms Risk
@@ -214,7 +226,11 @@ serve(async (req) => {
         factor: "Warranty terms",
         weight: riskWeights.warranty_terms,
         subscore: warrantyScore,
-        evidence: warrantyEvidence
+        evidence: warrantyEvidence,
+        points: warrantyScore !== null ? (warrantyScore * riskWeights.warranty_terms).toFixed(2) : null,
+        description: warrantyScore !== null 
+          ? `${warrantyMonths} months warranty (${warrantyScore <= 3 ? 'Low' : warrantyScore <= 6 ? 'Medium' : 'High'} risk)`
+          : "Warranty terms not specified"
       });
 
       // 5. Payment Terms Risk
@@ -249,7 +265,11 @@ serve(async (req) => {
         factor: "Payment terms",
         weight: riskWeights.payment_terms,
         subscore: paymentScore,
-        evidence: paymentEvidence
+        evidence: paymentEvidence,
+        points: paymentScore !== null ? (paymentScore * riskWeights.payment_terms).toFixed(2) : null,
+        description: paymentScore !== null 
+          ? `"${paymentTerms}" (${paymentScore <= 3 ? 'Low' : paymentScore <= 6 ? 'Medium' : 'High'} risk)`
+          : "Payment terms not specified"
       });
 
       // 6. Complexity Risk
@@ -301,7 +321,11 @@ serve(async (req) => {
         factor: "Complexity",
         weight: riskWeights.complexity,
         subscore: complexityScore,
-        evidence: complexityEvidence
+        evidence: complexityEvidence,
+        points: complexityScore !== null ? (complexityScore * riskWeights.complexity).toFixed(2) : null,
+        description: complexityScore !== null 
+          ? `${complexityEvidence} (${complexityScore <= 3 ? 'Low' : complexityScore <= 6 ? 'Medium' : 'High'} complexity)`
+          : "No line items found"
       });
 
       // Calculate final risk score (0-100)
