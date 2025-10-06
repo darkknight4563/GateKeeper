@@ -67,55 +67,64 @@ async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]
   }
 }
 
-// XLSX parser - extracts tables from Excel
+// XLSX parser - extracts tables from Excel with size limits to avoid timeouts
 async function parseXlsx(bytes: Uint8Array, filename: string): Promise<Fragment[]> {
-  const fragments: Fragment[] = [];
-  
   try {
+    // In Supabase Edge, prefer type: "array"
     const wb = XLSX.read(bytes, { type: 'array' });
-    
+
+    const fragments: Fragment[] = [];
     for (const sheetName of wb.SheetNames) {
-      const sheet = wb.Sheets[sheetName];
-      const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:Z200');
+      const ws = wb.Sheets[sheetName];
+      if (!ws) continue;
+
+      // Array-of-arrays for speed; keep numbers raw; provide defaults
+      const rows: any[][] = XLSX.utils.sheet_to_json(ws, {
+        header: 1,
+        raw: true,
+        defval: ''
+      });
+
+      // Skip empty sheets and cap size to avoid timeouts
+      const hasData = rows.some(r => r.some(c => c !== ''));
+      if (!hasData) continue;
+
+      const limited = rows.slice(0, 800); // cap rows
+      const cols = Math.min(
+        Math.max(...limited.map(r => r.length)),
+        30 // cap columns
+      );
+      const limitedCols = limited.map(r => r.slice(0, cols));
+
+      const ref = ws['!ref'] || `A1:${XLSX.utils.encode_cell({ r: limitedCols.length, c: cols })}`;
       
-      const rows: any[][] = [];
-      for (let R = range.s.r; R <= range.e.r; R++) {
-        const row: any[] = [];
-        for (let C = range.s.c; C <= range.e.c; C++) {
-          const addr = XLSX.utils.encode_cell({ r: R, c: C });
-          const cell = sheet[addr];
-          row.push(cell?.v ?? '');
+      // Convert to markdown table format
+      const tableText = limitedCols.map(row => 
+        row.map(cell => String(cell || '')).join(' | ')
+      ).join('\n');
+
+      fragments.push({
+        type: 'table',
+        content: tableText,
+        source: `${filename}#${sheetName}!${ref}`,
+        metadata: {
+          sheet: sheetName,
+          rows: limitedCols.length,
+          cols: cols
         }
-        rows.push(row);
-      }
-      
-      // Keep only non-empty grids
-      const nonEmpty = rows.some(r => r.some(v => v !== ''));
-      if (nonEmpty) {
-        // Convert to markdown table format
-        const tableText = rows.map(row => 
-          row.map(cell => String(cell || '')).join(' | ')
-        ).join('\n');
-        
-        fragments.push({
-          type: 'table',
-          content: tableText,
-          source: `${filename}#${sheetName}!${sheet['!ref']}`,
-          metadata: {
-            sheet: sheetName,
-            rows: rows.length,
-            cols: range.e.c - range.s.c + 1
-          }
-        });
-      }
+      });
     }
+
+    if (fragments.length === 0) {
+      throw new Error('XLSX contained no readable cells (empty or unsupported).');
+    }
+    
+    return fragments;
   } catch (error) {
     console.error('XLSX parsing error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
     throw new Error(`Failed to parse XLSX: ${message}`);
   }
-  
-  return fragments;
 }
 
 // CSV parser - extracts table from CSV
