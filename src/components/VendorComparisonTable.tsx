@@ -28,6 +28,7 @@ export interface VendorData {
     qualityAdjustment: number;
   };
   technicalSpecs?: {
+    // Fiber optic cable specs
     tubes?: number;
     fibers?: number;
     outerDiameter?: string;
@@ -38,6 +39,12 @@ export interface VendorData {
     certification?: string;
     standards?: string[];
     certifications?: string[];
+    // Medical equipment specs
+    manufacturer?: string;
+    productionCountry?: string;
+    documentComplexity?: string;
+    // Generic fields
+    [key: string]: any;
   };
   issues?: string[];
 }

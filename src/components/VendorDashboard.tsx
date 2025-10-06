@@ -47,6 +47,9 @@ const VendorDashboard: React.FC = () => {
         const texts: string[] = [];
         const nums: number[] = [];
         const currenciesSeen = new Set<string>();
+        let manufacturer = '';
+        let productModel = '';
+        let productionCountry = '';
 
         const pushNum = (n: any) => {
           if (typeof n === 'number' && isFinite(n)) nums.push(n);
@@ -70,9 +73,30 @@ const VendorDashboard: React.FC = () => {
             if (/\bNOK\b/i.test(t)) currenciesSeen.add('NOK');
             // extract obvious big numbers
             for (const m of t.matchAll(/[-+]?\d[\d.,]{3,}/g)) pushNum(m[0]);
+            
+            // Extract manufacturer info
+            if (t.toLowerCase().includes('produsent') || t.toLowerCase().includes('manufacturer')) {
+              const nextText = texts[texts.indexOf(t) + 1];
+              if (nextText && !manufacturer) manufacturer = nextText.trim();
+            }
+            
+            // Extract production country
+            if (t.toLowerCase().includes('produksjonsland') || t.toLowerCase().includes('production country')) {
+              const nextText = texts[texts.indexOf(t) + 1];
+              if (nextText && !productionCountry) productionCountry = nextText.trim();
+            }
           }
           if (Array.isArray(f?.table)) {
             for (const row of f.table as any[]) {
+              // Look for manufacturer and country in table rows
+              const rowText = row.join(' ');
+              if (rowText.match(/Philips|GE|Siemens/i) && !manufacturer) {
+                manufacturer = rowText.match(/Philips|GE|Siemens/i)?.[0] || '';
+              }
+              if (rowText.match(/USA|China|Norge|Denmark|Kina/i) && !productionCountry) {
+                productionCountry = rowText.match(/USA|China|Norge|Denmark|Kina/i)?.[0] || '';
+              }
+              
               for (const cell of row as any[]) pushNum(cell);
             }
           }
@@ -98,6 +122,8 @@ const VendorDashboard: React.FC = () => {
           currency,
           quotedPrice,
           leadDays,
+          manufacturer,
+          productionCountry,
         };
       });
 
@@ -170,6 +196,12 @@ const VendorDashboard: React.FC = () => {
         if (!price) issues.push('No clear total price detected in the document');
         if (v.fragmentsCount === 0) issues.push('No extractable content was found');
 
+        // Build technical specs from extracted data
+        const technicalSpecs: any = {};
+        if (v.manufacturer) technicalSpecs.manufacturer = v.manufacturer;
+        if (v.productionCountry) technicalSpecs.productionCountry = v.productionCountry;
+        technicalSpecs.documentComplexity = `${v.fragmentsCount} data sections`;
+
         return {
           id: `vendor-${i}`,
           vendorName,
@@ -187,6 +219,7 @@ const VendorDashboard: React.FC = () => {
             riskPremium,
             qualityAdjustment,
           },
+          technicalSpecs: Object.keys(technicalSpecs).length > 0 ? technicalSpecs : undefined,
           issues,
         } as VendorData;
       });
@@ -675,7 +708,7 @@ const VendorDashboard: React.FC = () => {
         });
       }
       
-      // Technical Specifications Section - Table Format
+      // Technical Specifications Section - Dynamic table based on available fields
       if (vendorResults.some(v => v.technicalSpecs)) {
         riskY += 15;
         
@@ -687,53 +720,73 @@ const VendorDashboard: React.FC = () => {
         
         doc.setFontSize(14);
         doc.setTextColor(0, 0, 0);
-        doc.text('Technical Specifications (BOM)', 14, riskY);
+        doc.text('Technical Specifications', 14, riskY);
         riskY += 8;
         
-        // Create table data for technical specifications
-        const techSpecsData = vendorResults
-          .filter(v => v.technicalSpecs)
-          .map(vendor => {
-            const specs = vendor.technicalSpecs!;
-            return [
-              vendor.vendorName.substring(0, 20),
-              specs.tubes !== undefined ? String(specs.tubes) : 'Not specified',
-              specs.fibers !== undefined ? String(specs.fibers) : 'Not specified',
-              specs.outerDiameter || 'Not specified',
-              specs.weight || 'Not specified',
-              specs.bendRadius || 'Not specified',
-              specs.length || 'Not specified',
-              specs.specification || 'Not specified',
-              specs.certification || 'Not specified'
-            ];
-          });
+        // Determine which fields are available across all vendors
+        const allFields = new Set<string>();
+        vendorResults.forEach(v => {
+          if (v.technicalSpecs) {
+            Object.keys(v.technicalSpecs).forEach(key => allFields.add(key));
+          }
+        });
         
-        if (techSpecsData.length > 0) {
+        // Check if we have fiber optic specs or medical equipment specs
+        const hasFiberSpecs = allFields.has('tubes') || allFields.has('fibers');
+        const hasMedicalSpecs = allFields.has('manufacturer') || allFields.has('productionCountry');
+        
+        if (hasFiberSpecs) {
+          // Original fiber optic cable format
+          const techSpecsData = vendorResults
+            .filter(v => v.technicalSpecs)
+            .map(vendor => {
+              const specs = vendor.technicalSpecs!;
+              return [
+                vendor.vendorName.substring(0, 20),
+                specs.tubes !== undefined ? String(specs.tubes) : '-',
+                specs.fibers !== undefined ? String(specs.fibers) : '-',
+                specs.outerDiameter || '-',
+                specs.weight || '-',
+                specs.bendRadius || '-',
+                specs.length || '-',
+                specs.specification || '-',
+                specs.certification || '-'
+              ];
+            });
+          
           autoTable(doc, {
             startY: riskY,
             head: [['Company', 'Tubes', 'Fibers', 'OD', 'Weight', 'Bend Radius', 'Length', 'Spec', 'Cert']],
             body: techSpecsData,
             headStyles: { fillColor: [100, 100, 100], fontSize: 8 },
             bodyStyles: { fontSize: 7 },
-            columnStyles: {
-              0: { cellWidth: 30 }, // Company name
-              1: { cellWidth: 15 }, // Tubes
-              2: { cellWidth: 15 }, // Fibers
-              3: { cellWidth: 25 }, // OD
-              4: { cellWidth: 25 }, // Weight
-              5: { cellWidth: 20 }, // Bend Radius
-              6: { cellWidth: 25 }, // Length
-              7: { cellWidth: 30 }, // Spec
-              8: { cellWidth: 35 }  // Cert
-            },
-            margin: { left: 14, right: 14 },
-            didDrawPage: (data) => {
-              riskY = (data as any).cursor?.y || riskY;
-            }
+            margin: { left: 14, right: 14 }
           });
+        } else if (hasMedicalSpecs) {
+          // Medical equipment format
+          const techSpecsData = vendorResults
+            .filter(v => v.technicalSpecs)
+            .map(vendor => {
+              const specs = vendor.technicalSpecs!;
+              return [
+                vendor.vendorName.substring(0, 30),
+                specs.manufacturer || '-',
+                specs.productionCountry || '-',
+                specs.documentComplexity || '-'
+              ];
+            });
           
-          riskY = (doc as any).lastAutoTable.finalY + 10;
+          autoTable(doc, {
+            startY: riskY,
+            head: [['Vendor', 'Manufacturer', 'Production Country', 'Document Complexity']],
+            body: techSpecsData,
+            headStyles: { fillColor: [100, 100, 100], fontSize: 9 },
+            bodyStyles: { fontSize: 8 },
+            margin: { left: 14, right: 14 }
+          });
         }
+        
+        riskY = (doc as any).lastAutoTable.finalY + 10;
       }
     }
 
