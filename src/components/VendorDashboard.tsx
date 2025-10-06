@@ -18,6 +18,7 @@ const VendorDashboard: React.FC = () => {
   const [selectedVendor, setSelectedVendor] = useState<VendorData | null>(null);
   const [vendorResults, setVendorResults] = useState<VendorData[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [aiInsightSummary, setAiInsightSummary] = useState<string>('');
 
   const handleFilesUploaded = (files: any[]) => {
     setUploadedFiles(files);
@@ -154,6 +155,10 @@ const VendorDashboard: React.FC = () => {
 
       setVendorResults(vendors);
       setSelectedVendor(null);
+      
+      // Generate AI insight summary
+      generateAIInsight(vendors);
+      
       toast.success(`Successfully processed ${files.length} document${files.length > 1 ? 's' : ''}`);
     } catch (error) {
       console.error('Processing error:', error);
@@ -170,12 +175,72 @@ const VendorDashboard: React.FC = () => {
       const mockResults = getMockProcessingResults();
       setVendorResults(mockResults.results);
       setSelectedVendor(null);
+      
+      // Generate AI insight summary for demo data
+      generateAIInsight(mockResults.results);
+      
       toast.success(`Loaded ${mockResults.results.length} demo vendor offers`);
     } catch (error) {
       console.error('Demo data load error:', error);
       toast.error('Failed to load demo data');
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const generateAIInsight = async (vendors: VendorData[]) => {
+    if (!vendors || vendors.length === 0) return;
+    
+    try {
+      const recommendedVendor = vendors.reduce((prev, current) => 
+        current.calculatedTCO < prev.calculatedTCO ? current : prev
+      );
+      
+      const avgTCO = vendors.reduce((sum, vendor) => sum + vendor.calculatedTCO, 0) / vendors.length;
+      const highRiskCount = vendors.filter(v => v.riskScore >= 70).length;
+      const worstVendor = vendors.reduce((prev, current) => 
+        current.calculatedTCO > prev.calculatedTCO ? current : prev
+      );
+      const totalSavings = worstVendor.calculatedTCO - recommendedVendor.calculatedTCO;
+      const currency = vendors[0]?.currency || 'EUR';
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-insight-summary`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            winner: recommendedVendor.vendorName,
+            avgTCO: Math.round(avgTCO),
+            highRiskCount,
+            totalVendors: vendors.length,
+            totalSavings,
+            currency,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (response.status === 429) {
+          toast.error('AI rate limit reached. Please try again later.');
+        } else if (response.status === 402) {
+          toast.error('AI credits required. Please add funds to continue.');
+        } else {
+          console.error('AI summary error:', errorData);
+        }
+        setAiInsightSummary('Analysis complete. Review the detailed vendor comparison below.');
+        return;
+      }
+
+      const data = await response.json();
+      setAiInsightSummary(data.summary || 'Analysis complete. Review the detailed vendor comparison below.');
+    } catch (error) {
+      console.error('Failed to generate AI insight:', error);
+      setAiInsightSummary('Analysis complete. Review the detailed vendor comparison below.');
     }
   };
 
@@ -538,6 +603,25 @@ const VendorDashboard: React.FC = () => {
                     <span className="font-semibold">{stats.highRiskCount}</span> high-risk vendor(s) detected
                   </AlertDescription>
                 </Alert>
+              )}
+              
+              {/* AI Insight Summary */}
+              {aiInsightSummary && (
+                <Card className="bg-gradient-to-r from-primary/5 to-azure/5 border-primary/20">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <BarChart3 className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-foreground mb-2">AI Insight Summary</h4>
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          {aiInsightSummary}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               )}
             </div>
           )}
