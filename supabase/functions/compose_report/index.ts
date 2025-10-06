@@ -395,17 +395,24 @@ ${vendors.map((v: any) => {
 
 **Risk Reduction:** ${v.what_lowers_risk}
 
-**Factor Breakdown:**${!hasFactors ? '\n[Data Gap: No risk factors computed]' : ''}
+#### Risk Breakdown
+
+${!hasFactors ? '[Data Gap: No risk factors computed]' : ''}
+${hasFactors ? 'Individual risk factors with weighted contributions to total score:\n\n' : ''}
 ${hasFactors ? v.risk_factors.map((f: any) => {
   const subscore = f.subscore !== null && f.subscore !== undefined ? f.subscore : null;
   const sign = subscore !== null && subscore <= 3 ? '✅' : subscore !== null && subscore >= 7 ? '⚠️' : '•';
   const scoreDisplay = subscore !== null ? `${subscore.toFixed(1)}/10` : 'N/A';
   const weightPct = ((f.weight || 0) * 100).toFixed(0);
   const contribution = subscore !== null ? ((f.weight || 0) * subscore * 10).toFixed(1) : 'N/A';
-  return `${sign} **${f.factor}** (weight: ${weightPct}%, score: ${scoreDisplay}, contribution: ${contribution}/100)\n  - ${f.evidence || '[Data Gap: No evidence]'}`;
-}).join('\n') : ''}
+  return `${sign} **${f.factor}**
+  - Weight: ${weightPct}% of total score
+  - Risk Score: ${scoreDisplay}
+  - Contribution: ${contribution}/100 points
+  - Evidence: ${f.evidence || '[Data Gap: No evidence]'}`;
+}).join('\n\n') : ''}
 
-**Calculation:** Total weighted score = ${weightedScore.toFixed(1)}/10 × 10 = **${v.risk_score}/100**
+**Total Risk Calculation:** Weighted score = ${weightedScore.toFixed(1)}/10 × 10 = **${v.risk_score}/100**
 `;
 }).join('\n---\n\n')}
 
