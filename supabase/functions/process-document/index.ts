@@ -27,11 +27,16 @@ interface Fragment {
 // PDF parser - extracts text from PDF using pdfjs in no-worker mode
 async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]> {
   try {
+    console.log(`=== PDF PARSING START: ${filename} ===`)
+    console.log(`PDF bytes received: ${bytes.length}`)
+    
     // Disable worker in Edge/Deno - use legacy build and no worker
     const pdf = await (getDocument as any)({ 
       data: bytes, 
       useWorker: false
     }).promise;
+
+    console.log(`PDF loaded successfully: ${pdf.numPages} pages`)
 
     const out: Array<{ source: string; text: string }> = [];
     for (let p = 1; p <= pdf.numPages; p++) {
@@ -42,12 +47,20 @@ async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]
         .join(" ")
         .replace(/\s+/g, " ")
         .trim();
-      if (text.length > 0) out.push({ source: `${filename}#p${p}`, text });
+      if (text.length > 0) {
+        out.push({ source: `${filename}#p${p}`, text });
+        console.log(`Page ${p}: extracted ${text.length} chars`)
+      } else {
+        console.log(`Page ${p}: no text found`)
+      }
     }
 
-    // Fallback: if still empty, tell the truth so users know they need OCR
-    if (out.length === 0) {
-      throw new Error("PDF has no extractable text (likely scanned/image); enable OCR or upload a text-based PDF.");
+    console.log(`PDF extraction complete: ${out.length} fragments from ${pdf.numPages} pages`)
+
+    // OCR detection: if PDF loaded but no text extracted, it's image-only
+    if (pdf.numPages > 0 && out.length === 0) {
+      console.error(`PDF is image-only (scanned): ${pdf.numPages} pages, 0 text fragments`)
+      throw new Error("PDF is image-only (scanned). Please enable OCR or upload a text-based PDF.");
     }
     
     // Convert to Fragment format
@@ -67,13 +80,23 @@ async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]
 // XLSX parser - extracts tables from Excel with size limits to avoid timeouts
 async function parseXlsx(bytes: Uint8Array, filename: string): Promise<Fragment[]> {
   try {
+    console.log(`=== XLSX PARSING START: ${filename} ===`)
+    console.log(`XLSX bytes received: ${bytes.length}`)
+    
     // In Supabase Edge, prefer type: "array"
     const wb = XLSX.read(bytes, { type: 'array' });
 
+    console.log(`XLSX loaded: ${wb.SheetNames.length} sheets`)
+    console.log(`Sheet names: ${JSON.stringify(wb.SheetNames)}`)
+
     const fragments: Fragment[] = [];
     for (const sheetName of wb.SheetNames) {
+      console.log(`Processing sheet: ${sheetName}`)
       const ws = wb.Sheets[sheetName];
-      if (!ws) continue;
+      if (!ws) {
+        console.log(`Sheet ${sheetName}: no data object`)
+        continue;
+      }
 
       // Array-of-arrays for speed; keep numbers raw; provide defaults
       const rows: any[][] = XLSX.utils.sheet_to_json(ws, {
@@ -84,7 +107,10 @@ async function parseXlsx(bytes: Uint8Array, filename: string): Promise<Fragment[
 
       // Skip empty sheets and cap size to avoid timeouts
       const hasData = rows.some(r => r.some(c => c !== ''));
-      if (!hasData) continue;
+      if (!hasData) {
+        console.log(`Sheet ${sheetName}: empty (no data)`)
+        continue;
+      }
 
       const limited = rows.slice(0, 800); // cap rows
       const cols = Math.min(
@@ -92,6 +118,8 @@ async function parseXlsx(bytes: Uint8Array, filename: string): Promise<Fragment[
         30 // cap columns
       );
       const limitedCols = limited.map(r => r.slice(0, cols));
+
+      console.log(`Sheet ${sheetName}: ${limitedCols.length} rows x ${cols} columns (capped)`)
 
       const ref = ws['!ref'] || `A1:${XLSX.utils.encode_cell({ r: limitedCols.length, c: cols })}`;
       
@@ -110,7 +138,11 @@ async function parseXlsx(bytes: Uint8Array, filename: string): Promise<Fragment[
           cols: cols
         }
       });
+      
+      console.log(`Sheet ${sheetName}: fragment created, ${tableText.length} chars`)
     }
+
+    console.log(`XLSX extraction complete: ${fragments.length} fragments`)
 
     if (fragments.length === 0) {
       throw new Error('XLSX contained no readable cells (empty or unsupported).');
@@ -239,7 +271,10 @@ serve(async (req) => {
       // Decode base64 to bytes
       fileBytes = Uint8Array.from(atob(body.file_b64), c => c.charCodeAt(0));
       
-      console.log(`Decoded ${fileBytes.length} bytes from base64`);
+      console.log(`=== BASE64 DECODE ===`)
+      console.log(`Decoded ${fileBytes.length} bytes from base64`)
+      console.log(`Expected size: ${size} bytes`)
+      console.log(`MIME type: ${mime}`)
 
       // Validate decoded bytes
       if (!fileBytes.length) {
@@ -294,24 +329,40 @@ serve(async (req) => {
     }
 
     // Parse file based on MIME type
+    console.log(`=== PARSING FILE ===`)
+    console.log(`Filename: ${filename}`)
+    console.log(`MIME: ${mime}`)
+    console.log(`Size: ${fileBytes.length} bytes`)
+    
     let fragments: Fragment[];
     
     if (mime === 'application/pdf') {
+      console.log('Using PDF parser')
       fragments = await parsePdf(fileBytes, filename);
     } else if (mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+      console.log('Using XLSX parser (OpenXML)')
       fragments = await parseXlsx(fileBytes, filename);
     } else if (mime === 'application/vnd.ms-excel') {
+      console.log('Using XLSX parser (legacy Excel)')
       fragments = await parseXlsx(fileBytes, filename);
     } else if (mime === 'text/csv') {
+      console.log('Using CSV parser')
       fragments = await parseCsv(fileBytes, filename);
     } else {
+      console.error(`Unsupported MIME type: ${mime}`)
       return new Response(
         JSON.stringify({ error: `Unsupported MIME type: ${mime}` }),
         { status: 415, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    console.log(`=== PARSING COMPLETE ===`)
+    console.log(`Extracted ${fragments.length} fragments from ${filename}`)
+    console.log(`Fragment types: ${fragments.map(f => f.type).join(', ')}`)
+    console.log(`Fragment sources: ${fragments.map(f => f.source).join(', ')}`)
+
     if (!fragments || fragments.length === 0) {
+      console.error('ERROR: No fragments extracted')
       return new Response(
         JSON.stringify({ error: 'No text/tables extracted from document' }),
         { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
