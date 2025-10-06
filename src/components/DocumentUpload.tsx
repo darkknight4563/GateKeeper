@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { documentApi, type DocumentUploadResponse, type VendorData } from '@/services/documentApi';
 import { useToast } from '@/hooks/use-toast';
+import { processFile } from '@/services/ingest';
 
 const DocumentUpload = () => {
   const [isUploading, setIsUploading] = useState(false);
@@ -38,17 +39,13 @@ const DocumentUpload = () => {
       return;
     }
 
-    if (file.type !== 'application/pdf') {
-      toast({
-        title: "Invalid file type",
-        description: "Please upload a PDF file",
-        variant: "destructive"
-      });
-      return;
-    }
-
     setIsUploading(true);
     try {
+      // Process document using new ingest service
+      const result = await processFile(file);
+      console.log("Ingest fragments:", result);
+      
+      // Upload to backend for further processing
       const response = await documentApi.uploadDocument(file);
       setUploadedDoc(response);
       
@@ -183,7 +180,7 @@ const DocumentUpload = () => {
           <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
             <input
               type="file"
-              accept=".pdf"
+              accept=".pdf,.xlsx,.docx,.csv"
               onChange={handleFileUpload}
               disabled={isUploading}
               className="hidden"
@@ -200,10 +197,10 @@ const DocumentUpload = () => {
               )}
               <div>
                 <p className="text-lg font-medium">
-                  {isUploading ? 'Processing document...' : 'Upload PDF Document'}
+                  {isUploading ? 'Processing document...' : 'Upload Document'}
                 </p>
                 <p className="text-muted-foreground">
-                  Click to select or drag and drop your PDF file here
+                  Click to select or drag and drop (PDF, Excel, Word, CSV)
                 </p>
               </div>
             </label>
