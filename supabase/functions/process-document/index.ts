@@ -3,15 +3,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.3.136";
 
-// Configure PDF.js to run without a worker in Deno
-try {
-  // @ts-ignore
-  if ((pdfjsLib as any)?.GlobalWorkerOptions) {
-    // @ts-ignore
-    (pdfjsLib as any).GlobalWorkerOptions.workerSrc = '';
-  }
-} catch (_) { /* no-op */ }
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') ?? '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -35,34 +26,45 @@ interface Fragment {
 
 // PDF parser - extracts text from PDF using pdfjs in no-worker mode
 async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]> {
-  // Disable worker in Edge/Deno
-  const loadingTask = pdfjsLib.getDocument({ data: bytes, useWorker: false });
-  const pdf = await loadingTask.promise;
+  try {
+    // Disable worker in Edge/Deno - must be called before getDocument
+    const loadingTask = (pdfjsLib as any).getDocument({ 
+      data: bytes, 
+      useWorker: false,
+      isEvalSupported: false,
+      useSystemFonts: true
+    });
+    const pdf = await loadingTask.promise;
 
-  const out: Array<{ source: string; text: string }> = [];
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
-    const content = await page.getTextContent();
-    const text = content.items
-      .map((i: any) => i.str)
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (text.length > 0) out.push({ source: `${filename}#p${p}`, text });
-  }
+    const out: Array<{ source: string; text: string }> = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      const text = content.items
+        .map((i: any) => i.str)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (text.length > 0) out.push({ source: `${filename}#p${p}`, text });
+    }
 
-  // Fallback: if still empty, tell the truth so users know they need OCR
-  if (out.length === 0) {
-    throw new Error("PDF has no extractable text (likely scanned/image); enable OCR or upload a text-based PDF.");
+    // Fallback: if still empty, tell the truth so users know they need OCR
+    if (out.length === 0) {
+      throw new Error("PDF has no extractable text (likely scanned/image); enable OCR or upload a text-based PDF.");
+    }
+    
+    // Convert to Fragment format
+    return out.map(item => ({
+      type: 'text' as const,
+      content: item.text,
+      source: item.source,
+      metadata: { page: parseInt(item.source.split('#p')[1]) }
+    }));
+  } catch (error) {
+    console.error('PDF parsing error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to parse PDF: ${message}`);
   }
-  
-  // Convert to Fragment format
-  return out.map(item => ({
-    type: 'text' as const,
-    content: item.text,
-    source: item.source,
-    metadata: { page: parseInt(item.source.split('#p')[1]) }
-  }));
 }
 
 // XLSX parser - extracts tables from Excel
