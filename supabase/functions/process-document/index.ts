@@ -192,8 +192,72 @@ serve(async (req) => {
       });
     }
 
-    // Return fragments to your LLM extractor or call it right here.
-    return json(200, { fragments });
+    // ============ GAP & ISSUE ANALYSIS ============
+    // Analyze extracted content for critical missing fields
+    const dataGaps: string[] = [];
+    const alerts: string[] = [];
+    
+    // Check if fragments contain critical fields
+    const allText = fragments
+      .filter(f => 'text' in f)
+      .map(f => (f as any).text)
+      .join(' ')
+      .toLowerCase();
+    
+    const allTables = fragments.filter(f => 'table' in f);
+    
+    // Critical fields to check
+    const criticalFields = {
+      warranty: /warranty|garanti|garantie/i,
+      delivery: /delivery|levering|lead[\s-]?time|delivery[\s-]?time|leveringstid/i,
+      payment: /payment[\s-]?terms|betalingsbetingelser|payment|betaling/i,
+      price: /price|pris|cost|kostnad|amount|beløp/i,
+      currency: /\b(USD|EUR|NOK|GBP|SEK|DKK)\b|currency|valuta/i,
+    };
+    
+    // Check for missing fields
+    for (const [field, pattern] of Object.entries(criticalFields)) {
+      const foundInText = pattern.test(allText);
+      const foundInTables = allTables.some(t => {
+        const tableStr = JSON.stringify((t as any).table).toLowerCase();
+        return pattern.test(tableStr);
+      });
+      
+      if (!foundInText && !foundInTables) {
+        dataGaps.push(`Missing ${field} information`);
+      }
+    }
+    
+    // Additional alerts for quality issues
+    if (fragments.length === 1 && 'text' in fragments[0]) {
+      const textLen = (fragments[0] as any).text.length;
+      if (textLen < 100) {
+        alerts.push('Document contains very little text - may need manual review');
+      }
+    }
+    
+    if (allTables.length === 0 && mime.includes('spreadsheet')) {
+      alerts.push('Excel file contains no readable tables');
+    }
+    
+    // Log gaps and alerts for debugging
+    if (dataGaps.length > 0 || alerts.length > 0) {
+      console.log('DATA GAPS:', dataGaps);
+      console.log('ALERTS:', alerts);
+    }
+
+    // Return fragments with gap analysis
+    return json(200, { 
+      fragments,
+      data_gaps: dataGaps.length > 0 ? dataGaps : undefined,
+      alerts: alerts.length > 0 ? alerts : undefined,
+      analysis: {
+        total_fragments: fragments.length,
+        text_fragments: fragments.filter(f => 'text' in f).length,
+        table_fragments: fragments.filter(f => 'table' in f).length,
+        has_critical_gaps: dataGaps.length > 0,
+      }
+    });
 
   } catch (e: any) {
     return json(500, { error: `process-document error: ${e.message}` });
