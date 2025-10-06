@@ -133,8 +133,18 @@ serve(async (req) => {
       head: payload?.file_b64?.slice?.(0, 40) ?? null,
     });
 
-    if (!payload?.file_b64 || payload.file_b64.length < 100) {
-      return json(400, { error: "Empty file_content (base64)" });
+    // Sanitize base64 - strip data URL prefix if present
+    function sanitizeB64(s: string) {
+      if (!s) return s;
+      const i = s.indexOf(","); 
+      return s.startsWith("data:") && i >= 0 ? s.slice(i + 1) : s.replace(/\s/g, "");
+    }
+
+    const raw = payload.file_b64;
+    payload.file_b64 = sanitizeB64(raw);
+
+    if (!payload.file_b64 || payload.file_b64.length < 100) {
+      return json(400, { error: "Empty file_content (base64) after sanitize" });
     }
 
     const bytes = b64ToBytes(payload.file_b64);
