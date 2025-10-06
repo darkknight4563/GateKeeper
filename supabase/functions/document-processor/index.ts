@@ -90,7 +90,15 @@ serve(async (req) => {
 
     const { document_id, file_content, filename, mime_type, fragments } = await req.json()
 
+    console.log('=== DOCUMENT-PROCESSOR START ===')
+    console.log('document_id:', document_id)
+    console.log('has fragments:', !!fragments)
+    console.log('has file_content:', !!file_content)
+    console.log('filename:', filename)
+    console.log('mime_type:', mime_type)
+
     if (!document_id) {
+      console.error('ERROR: document_id missing')
       return new Response(
         JSON.stringify({ error: 'document_id required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -259,7 +267,9 @@ serve(async (req) => {
 
     // Now parsedFragments contains the fragments to process
     
+    console.log('=== FRAGMENTS READY ===')
     console.log(`Total parsed fragments: ${parsedFragments.length}`)
+    console.log('Fragment sources:', parsedFragments.map(f => f.source))
     
     // Assemble structured payload
     const payload = {
@@ -332,6 +342,10 @@ EXAMPLES:
 
 Return ONLY valid JSON matching the schema above. No markdown, no explanations.`
 
+    console.log('=== CALLING AI ===')
+    console.log('Model: google/gemini-2.5-flash')
+    console.log('Prompt length:', extractionPrompt.length)
+    
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -351,6 +365,10 @@ Return ONLY valid JSON matching the schema above. No markdown, no explanations.`
       }),
     })
 
+    console.log('=== AI RESPONSE ===')
+    console.log('Status:', aiResponse.status)
+    console.log('OK:', aiResponse.ok)
+
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text()
       console.error('Lovable AI error:', aiResponse.status, errorText)
@@ -358,13 +376,21 @@ Return ONLY valid JSON matching the schema above. No markdown, no explanations.`
     }
 
     const aiResult = await aiResponse.json()
+    console.log('=== AI RESULT PARSED ===')
+    console.log('Has choices:', !!aiResult.choices)
+    console.log('Choices length:', aiResult.choices?.length)
+    
     const extractedContent = aiResult.choices[0]?.message?.content
 
     if (!extractedContent) {
+      console.error('ERROR: No content extracted from AI response')
+      console.error('AI result:', JSON.stringify(aiResult))
       throw new Error('No content extracted from AI response')
     }
 
-    console.log('Raw AI response:', extractedContent)
+    console.log('=== EXTRACTED CONTENT ===')
+    console.log('Content length:', extractedContent.length)
+    console.log('Raw AI response preview:', extractedContent.substring(0, 200))
 
     // Parse the JSON response (handle potential markdown code blocks)
     let parsedResponse
@@ -525,8 +551,14 @@ Return ONLY valid JSON matching the schema above. No markdown, no explanations.`
       issues: issues
     }
     
-    console.log('Processed vendor data:', vendorData)
+    console.log('=== VENDOR DATA PROCESSED ===')
+    console.log('Vendor name:', vendorData.vendor_name)
+    console.log('Items count:', vendorData.items_count)
+    console.log('Total price:', vendorData.quoted_total)
+    console.log('Issues count:', vendorData.issues.length)
+    console.log('Processed vendor data preview:', JSON.stringify(vendorData).substring(0, 200))
 
+    console.log('=== RETURNING SUCCESS ===')
     return new Response(
       JSON.stringify({ 
         success: true,
@@ -541,7 +573,12 @@ Return ONLY valid JSON matching the schema above. No markdown, no explanations.`
     )
 
   } catch (error) {
-    console.error('Document processor error:', error)
+    console.error('=== DOCUMENT-PROCESSOR FATAL ERROR ===')
+    console.error('Error type:', error?.constructor?.name)
+    console.error('Error message:', error instanceof Error ? error.message : 'Unknown')
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack')
+    console.error('Full error:', error)
+    
     return new Response(
       JSON.stringify({ 
         error: error instanceof Error ? error.message : 'Processing failed',
