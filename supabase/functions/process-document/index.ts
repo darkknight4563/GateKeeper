@@ -2,11 +2,9 @@
 // { "tasks": {}, "nodeModulesDir": "auto" }
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import * as pdfjs from "https://esm.sh/pdfjs-dist@4.3.136"; // text PDFs
-import * as XLSX from "npm:xlsx@0.18.5";                    // Excel
-// For DOCX we'll use mammoth; if your Edge env complains, move DOCX to a small Node/Next API.
-// If Edge supports it, this works:
-import mammoth from "npm:mammoth";                           // DOCX → text
+import * as pdfjs from "https://esm.sh/pdfjs-dist@4.3.136/legacy/build/pdf.mjs"; // legacy build, no worker
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";                    // Excel
+// For DOCX we'll try mammoth via dynamic import at runtime to avoid build-time npm resolution issues.
 
 // ----------- CORS -----------
 const cors = {
@@ -62,7 +60,7 @@ async function runOCR(imageOrPdfBytes: Uint8Array, lang = "eng+nor"): Promise<st
   const res = await fetch(OCR_API_URL, {
     method: "POST",
     headers: { "Authorization": `Bearer ${OCR_API_KEY}` },
-    body: imageOrPdfBytes, // or multipart if your provider wants it
+    body: imageOrPdfBytes.buffer as ArrayBuffer, // or multipart if your provider wants it
   });
   if (!res.ok) throw new Error(`OCR failed: ${res.status} ${await res.text()}`);
   const data = await res.json();
@@ -73,7 +71,7 @@ async function runOCR(imageOrPdfBytes: Uint8Array, lang = "eng+nor"): Promise<st
 // ----------- PDF parser -----------
 async function parsePdf(bytes: Uint8Array, name: string): Promise<Fragment[]> {
   // Edge-safe: disable worker
-  const doc = await pdfjs.getDocument({ data: bytes, useWorker: false }).promise;
+  const doc = await (pdfjs as any).getDocument({ data: bytes, useWorker: false } as any).promise;
   const frags: Fragment[] = [];
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
@@ -93,15 +91,9 @@ async function parsePdf(bytes: Uint8Array, name: string): Promise<Fragment[]> {
 
 // ----------- DOCX parser -----------
 async function parseDocx(bytes: Uint8Array, name: string): Promise<Fragment[]> {
-  try {
-    const { value } = await mammoth.convertToHtml({ buffer: bytes }); // HTML is fine; strip tags
-    const text = value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    if (text.length) return [{ source: `${name}#docx`, text }];
-  } catch {
-    // some Edge environments hate mammoth; fall through to OCR via PDF render if needed
-  }
-  // As a fallback, treat DOCX as binary image only if you must; better: send "not supported"
-  throw new Error("DOCX parsing not available in this runtime. Handle server-side or enable mammoth.");
+  // Mammoth is not available in this Edge runtime; handle DOCX server-side
+  // or convert to PDF/text before calling this function.
+  throw new Error('DOCX parsing not available in this runtime. Handle server-side.');
 }
 
 // ----------- XLSX parser -----------
