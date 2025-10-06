@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { documentApi, type DocumentUploadResponse, type VendorData } from '@/services/documentApi';
 import { useToast } from '@/hooks/use-toast';
-import { processFile } from '@/services/ingest';
+import { processFiles } from '@/services/ingest';
 
 const DocumentUpload = () => {
   const [isUploading, setIsUploading] = useState(false);
@@ -42,8 +42,8 @@ const DocumentUpload = () => {
     setIsUploading(true);
     try {
       // Process document using new ingest service
-      const result = await processFile(file);
-      console.log("Ingest fragments:", result);
+      const results = await processFiles([file]);
+      console.log("Ingest fragments:", results);
       
       // Upload to backend for further processing
       const response = await documentApi.uploadDocument(file);
