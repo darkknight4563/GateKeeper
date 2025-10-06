@@ -32,8 +32,15 @@ async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]
     
     // Disable worker in Edge/Deno - use legacy build and no worker
     // Explicitly disable worker to avoid GlobalWorkerOptions requirement
-    ;(pdfjsLib as any).GlobalWorkerOptions = (pdfjsLib as any).GlobalWorkerOptions || {}
-    ;(pdfjsLib as any).GlobalWorkerOptions.workerSrc = "https://esm.sh/pdfjs-dist@4.3.136/legacy/build/pdf.worker.mjs"
+    // Guarded workerSrc setup to avoid write on read-only module property
+    try {
+      const gw = (pdfjsLib as any).GlobalWorkerOptions
+      if (gw && typeof gw === 'object') {
+        gw.workerSrc = "https://esm.sh/pdfjs-dist@4.3.136/legacy/build/pdf.worker.mjs"
+      }
+    } catch (_) {
+      // Ignore if GlobalWorkerOptions is read-only or unavailable
+    }
 
     const pdf = await (pdfjsLib as any).getDocument({ 
       data: bytes, 
