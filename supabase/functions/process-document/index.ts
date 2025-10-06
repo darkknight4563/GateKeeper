@@ -126,6 +126,13 @@ serve(async (req) => {
   try {
     const payload = (await req.json()) as Payload;
 
+    console.log("INGEST DEBUG", {
+      filename: payload?.filename,
+      mime: payload?.mime,
+      len: payload?.file_b64 ? payload.file_b64.length : 0,
+      head: payload?.file_b64?.slice?.(0, 40) ?? null,
+    });
+
     if (!payload?.file_b64 || payload.file_b64.length < 100) {
       return json(400, { error: "Empty file_content (base64)" });
     }
