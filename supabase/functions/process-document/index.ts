@@ -70,8 +70,14 @@ async function runOCR(imageOrPdfBytes: Uint8Array, lang = "eng+nor"): Promise<st
 
 // ----------- PDF parser -----------
 async function parsePdf(bytes: Uint8Array, name: string): Promise<Fragment[]> {
-  // Edge-safe: disable worker
-  const doc = await (pdfjs as any).getDocument({ data: bytes, useWorker: false } as any).promise;
+  // Edge-safe: disable worker explicitly
+  const loadingTask = (pdfjs as any).getDocument({
+    data: bytes,
+    useWorker: false,
+    isEvalSupported: false,
+    useSystemFonts: true,
+  });
+  const doc = await loadingTask.promise;
   const frags: Fragment[] = [];
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
