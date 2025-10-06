@@ -118,7 +118,53 @@ const VendorDashboard: React.FC = () => {
         const riskPremium = Math.round(price * (0.01 + norm(v.leadDays, minL, maxL) * 0.02));
         const qualityAdjustment = 0;
         const calculatedTCO = Math.round(price + ship + handling + riskPremium + qualityAdjustment);
-        const riskScore = Math.min(95, Math.max(5, Math.round(20 + norm(price, minP, maxP) * 50 + norm(v.leadDays, minL, maxL) * 30)));
+        
+        // Calculate detailed risk score with factor breakdown
+        const priceNormFactor = norm(price, minP, maxP);
+        const leadNormFactor = norm(v.leadDays, minL, maxL);
+        
+        // Schedule risk (0-30 points based on lead time)
+        const scheduleRiskPoints = Math.round(leadNormFactor * 30);
+        const scheduleRiskDesc = leadNormFactor > 0.7 ? 'High schedule risk' 
+          : leadNormFactor > 0.4 ? 'Moderate schedule risk' 
+          : 'Low schedule risk';
+        
+        // Price risk (0-40 points based on price variance)
+        const priceRiskPoints = Math.round(priceNormFactor * 40);
+        const priceVarianceAmount = price - minP;
+        const priceVarianceFormatted = new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: v.currency,
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0,
+        }).format(priceVarianceAmount);
+        const priceRiskDesc = priceVarianceAmount > 0 
+          ? `Price variance ${priceVarianceFormatted} above base cost`
+          : 'Competitive pricing';
+        
+        // Delivery complexity (0-15 points)
+        const complexityPoints = v.fragmentsCount > 5 ? 15 : v.fragmentsCount > 3 ? 10 : 5;
+        
+        // Quality adjustment (-10 to 0 points)
+        const qualityPoints = -5; // Assume standard quality for all
+        
+        const totalRiskScore = Math.min(95, Math.max(5, scheduleRiskPoints + priceRiskPoints + complexityPoints + qualityPoints));
+        
+        // Build detailed risk factor breakdown
+        const riskFactors: string[] = [];
+        if (scheduleRiskPoints > 0) {
+          riskFactors.push(`+${scheduleRiskPoints} points: ${scheduleRiskDesc} (${Math.round(v.leadDays / 7)} weeks lead time)`);
+        }
+        if (priceRiskPoints > 0) {
+          riskFactors.push(`+${priceRiskPoints} points: ${priceRiskDesc}`);
+        }
+        if (complexityPoints > 0) {
+          riskFactors.push(`+${complexityPoints} points: ${v.fragmentsCount > 5 ? 'Complex multi-section document' : 'Standard document structure'}`);
+        }
+        if (qualityPoints < 0) {
+          riskFactors.push(`${qualityPoints} points: Standard quality expectations`);
+        }
+        riskFactors.push(`= ${totalRiskScore} Total Risk Score`);
 
         const issues: string[] = [];
         if (!price) issues.push('No clear total price detected in the document');
@@ -130,13 +176,10 @@ const VendorDashboard: React.FC = () => {
           quotedPrice: price,
           calculatedTCO,
           leadTime: v.leadDays,
-          riskScore,
+          riskScore: totalRiskScore,
           items: 1,
           currency: v.currency,
-          riskFactors: [
-            `Price normalization factor: ${(norm(price, minP, maxP) * 100).toFixed(0)}%`,
-            `Lead time: ${v.leadDays} days`,
-          ],
+          riskFactors,
           tcoBreakdown: {
             quotedPrice: price,
             shippingCosts: ship,
@@ -507,7 +550,7 @@ const VendorDashboard: React.FC = () => {
         });
       }
       
-      // Risk Analysis Section
+      // Risk Analysis Section with detailed breakdown
       let riskY = finalY + 15;
       if (riskY > doc.internal.pageSize.height - 100) {
         doc.addPage();
@@ -521,36 +564,58 @@ const VendorDashboard: React.FC = () => {
       vendorResults.forEach((vendor, index) => {
         riskY += 12;
         
-        // Vendor name with risk score
-        doc.setFontSize(11);
+        // Check if we need a new page
+        if (riskY > doc.internal.pageSize.height - 80) {
+          doc.addPage();
+          riskY = 20;
+        }
+        
+        // Vendor header with name and risk score
+        doc.setFontSize(12);
         doc.setTextColor(0, 0, 0);
-        doc.text(`${vendor.vendorName} (Risk Score: ${vendor.riskScore}/100)`, 14, riskY);
+        doc.text(`${vendor.vendorName}`, 14, riskY);
         
         riskY += 6;
-        doc.setFontSize(9);
-        doc.setTextColor(60, 60, 60);
+        doc.setFontSize(10);
+        doc.text(`Risk Score: ${vendor.riskScore}/100`, 14, riskY);
         
-        // Risk factors
-        vendor.riskFactors.forEach((factor) => {
-          if (riskY > doc.internal.pageSize.height - 30) {
-            doc.addPage();
-            riskY = 20;
-          }
-          
-          // Color code based on factor type
-          if (factor.startsWith('+')) {
-            doc.setTextColor(200, 0, 0); // Red for negative factors
-          } else if (factor.startsWith('-')) {
-            doc.setTextColor(0, 150, 0); // Green for positive factors
-          } else if (factor.startsWith('=')) {
-            doc.setFontSize(10);
-            doc.setTextColor(0, 0, 0); // Black for total
-          }
-          
-          doc.text(`  ${factor}`, 18, riskY);
-          riskY += 5;
-          doc.setFontSize(9);
-        });
+        riskY += 6;
+        
+        // Price normalization factor (calculate from TCO components)
+        const priceVariance = vendor.quotedPrice > 0 
+          ? ((vendor.quotedPrice - vendorResults[0].quotedPrice) / vendorResults[0].quotedPrice) * 100 
+          : 0;
+        doc.setFontSize(9);
+        doc.text(`Price normalization factor: ${priceVariance.toFixed(0)}%`, 14, riskY);
+        
+        riskY += 5;
+        doc.text(`Lead time: ${vendor.leadTime} days`, 14, riskY);
+        
+        riskY += 8;
+        
+        // Show detailed risk factors if available
+        if (vendor.riskFactors && vendor.riskFactors.length > 0) {
+          vendor.riskFactors.forEach((factor) => {
+            if (riskY > doc.internal.pageSize.height - 30) {
+              doc.addPage();
+              riskY = 20;
+            }
+            
+            // Color code based on factor type
+            if (factor.startsWith('+')) {
+              doc.setTextColor(200, 0, 0); // Red for risk-increasing factors
+            } else if (factor.startsWith('-')) {
+              doc.setTextColor(0, 150, 0); // Green for risk-reducing factors
+            } else if (factor.startsWith('=')) {
+              doc.setFontSize(10);
+              doc.setTextColor(0, 0, 0); // Black for total
+            }
+            
+            doc.text(`  ${factor}`, 18, riskY);
+            riskY += 5;
+            doc.setFontSize(9);
+          });
+        }
         
         riskY += 5; // Space between vendors
       });
@@ -610,9 +675,9 @@ const VendorDashboard: React.FC = () => {
         });
       }
       
-      // Technical Specifications Section
+      // Technical Specifications Section - Table Format
       if (vendorResults.some(v => v.technicalSpecs)) {
-        riskY += 10;
+        riskY += 15;
         
         // Check if we need a new page
         if (riskY > doc.internal.pageSize.height - 100) {
@@ -623,51 +688,52 @@ const VendorDashboard: React.FC = () => {
         doc.setFontSize(14);
         doc.setTextColor(0, 0, 0);
         doc.text('Technical Specifications (BOM)', 14, riskY);
-        doc.setFontSize(9);
+        riskY += 8;
         
-        vendorResults.forEach((vendor) => {
-          if (!vendor.technicalSpecs) return;
-          
-          riskY += 12;
-          
-          // Check if we need a new page
-          if (riskY > doc.internal.pageSize.height - 60) {
-            doc.addPage();
-            riskY = 20;
-          }
-          
-          // Vendor name
-          doc.setFontSize(11);
-          doc.setTextColor(0, 0, 0);
-          doc.text(vendor.vendorName, 14, riskY);
-          
-          riskY += 6;
-          doc.setFontSize(9);
-          doc.setTextColor(60, 60, 60);
-          
-          const specs = vendor.technicalSpecs;
-          const specLines = [
-            specs.tubes && `Tubes: ${specs.tubes}`,
-            specs.fibers && `Fibers: ${specs.fibers}`,
-            specs.outerDiameter && `OD: ${specs.outerDiameter}`,
-            specs.weight && `Weight: ${specs.weight}`,
-            specs.bendRadius && `Bend Radius: ${specs.bendRadius}`,
-            specs.length && `Length: ${specs.length}`,
-            specs.specification && `Spec: ${specs.specification}`,
-            specs.certification && `Cert: ${specs.certification}`
-          ].filter(Boolean) as string[];
-          
-          specLines.forEach((line) => {
-            if (riskY > doc.internal.pageSize.height - 30) {
-              doc.addPage();
-              riskY = 20;
+        // Create table data for technical specifications
+        const techSpecsData = vendorResults
+          .filter(v => v.technicalSpecs)
+          .map(vendor => {
+            const specs = vendor.technicalSpecs!;
+            return [
+              vendor.vendorName.substring(0, 20),
+              specs.tubes !== undefined ? String(specs.tubes) : 'Not specified',
+              specs.fibers !== undefined ? String(specs.fibers) : 'Not specified',
+              specs.outerDiameter || 'Not specified',
+              specs.weight || 'Not specified',
+              specs.bendRadius || 'Not specified',
+              specs.length || 'Not specified',
+              specs.specification || 'Not specified',
+              specs.certification || 'Not specified'
+            ];
+          });
+        
+        if (techSpecsData.length > 0) {
+          autoTable(doc, {
+            startY: riskY,
+            head: [['Company', 'Tubes', 'Fibers', 'OD', 'Weight', 'Bend Radius', 'Length', 'Spec', 'Cert']],
+            body: techSpecsData,
+            headStyles: { fillColor: [100, 100, 100], fontSize: 8 },
+            bodyStyles: { fontSize: 7 },
+            columnStyles: {
+              0: { cellWidth: 30 }, // Company name
+              1: { cellWidth: 15 }, // Tubes
+              2: { cellWidth: 15 }, // Fibers
+              3: { cellWidth: 25 }, // OD
+              4: { cellWidth: 25 }, // Weight
+              5: { cellWidth: 20 }, // Bend Radius
+              6: { cellWidth: 25 }, // Length
+              7: { cellWidth: 30 }, // Spec
+              8: { cellWidth: 35 }  // Cert
+            },
+            margin: { left: 14, right: 14 },
+            didDrawPage: (data) => {
+              riskY = (data as any).cursor?.y || riskY;
             }
-            doc.text(`  ${line}`, 18, riskY);
-            riskY += 5;
           });
           
-          riskY += 3;
-        });
+          riskY = (doc as any).lastAutoTable.finalY + 10;
+        }
       }
     }
 
