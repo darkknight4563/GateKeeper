@@ -287,6 +287,25 @@ const VendorDashboard: React.FC = () => {
     doc.setFontSize(20);
     doc.text('Vendor Comparison Report', 14, 20);
     
+    // AI Insight Summary (if available)
+    let currentY = 35;
+    if (aiInsightSummary) {
+      doc.setFontSize(14);
+      doc.setTextColor(41, 128, 185); // Blue color
+      doc.text('AI Insight Summary', 14, currentY);
+      currentY += 8;
+      
+      doc.setFontSize(10);
+      doc.setTextColor(60, 60, 60);
+      const maxWidth = doc.internal.pageSize.width - 28;
+      const summaryLines = doc.splitTextToSize(aiInsightSummary, maxWidth);
+      summaryLines.forEach((line: string) => {
+        doc.text(line, 14, currentY);
+        currentY += 5;
+      });
+      currentY += 5;
+    }
+    
     // Winner Recommendation
     if (stats) {
       const winner = vendorResults.find(v => v.vendorName === stats.recommendedVendor);
@@ -294,11 +313,14 @@ const VendorDashboard: React.FC = () => {
       
       doc.setFontSize(12);
       doc.setTextColor(0, 128, 0);
-      doc.text(`Winner: ${stats.recommendedVendor}`, 14, 35);
+      doc.text(`Winner: ${stats.recommendedVendor}`, 14, currentY);
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(10);
-      doc.text(`TCO: ${formatCurrency(stats.recommendedTCO, currency)} | Lead Time: ${stats.recommendedLeadTime} days`, 14, 42);
-      doc.text(`Saves ${formatCurrency(stats.totalSavings, currency)} vs worst option`, 14, 48);
+      currentY += 7;
+      doc.text(`TCO: ${formatCurrency(stats.recommendedTCO, currency)} | Lead Time: ${stats.recommendedLeadTime} days`, 14, currentY);
+      currentY += 6;
+      doc.text(`Saves ${formatCurrency(stats.totalSavings, currency)} vs worst option`, 14, currentY);
+      currentY += 10;
     }
     
     // Table data
@@ -313,7 +335,7 @@ const VendorDashboard: React.FC = () => {
     
     // Generate table
     autoTable(doc, {
-      startY: 55,
+      startY: currentY,
       head: [['Vendor', 'Quoted Price', 'Total TCO', 'Lead Time', 'Risk Score', 'Risk Level']],
       body: tableData,
       headStyles: { fillColor: [41, 128, 185] },
@@ -338,16 +360,159 @@ const VendorDashboard: React.FC = () => {
     // Summary stats
     if (stats) {
       const currency = vendorResults[0]?.currency || 'EUR';
-      const finalY = (doc as any).lastAutoTable.finalY + 10;
+      let finalY = (doc as any).lastAutoTable.finalY + 10;
       doc.setFontSize(11);
       doc.text('Summary Statistics:', 14, finalY);
       doc.setFontSize(10);
-      doc.text(`Total Vendors Analyzed: ${stats.totalVendors}`, 14, finalY + 7);
-      doc.text(`Average TCO: ${formatCurrency(Math.round(stats.avgTCO), currency)}`, 14, finalY + 14);
-      doc.text(`High Risk Vendors: ${stats.highRiskCount}`, 14, finalY + 21);
+      finalY += 7;
+      doc.text(`Total Vendors Analyzed: ${stats.totalVendors}`, 14, finalY);
+      finalY += 7;
+      doc.text(`Average TCO: ${formatCurrency(Math.round(stats.avgTCO), currency)}`, 14, finalY);
+      finalY += 7;
+      doc.text(`High Risk Vendors: ${stats.highRiskCount}`, 14, finalY);
+      
+      // TCO Comparison Chart (text representation)
+      finalY += 15;
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      doc.text('TCO Comparison Chart:', 14, finalY);
+      finalY += 8;
+      doc.setFontSize(9);
+      
+      // Sort vendors by TCO for chart
+      const sortedByTCO = [...vendorResults].sort((a, b) => a.calculatedTCO - b.calculatedTCO);
+      const maxTCO = Math.max(...vendorResults.map(v => v.calculatedTCO));
+      
+      sortedByTCO.forEach((vendor) => {
+        if (finalY > doc.internal.pageSize.height - 30) {
+          doc.addPage();
+          finalY = 20;
+        }
+        
+        const barWidth = (vendor.calculatedTCO / maxTCO) * 150;
+        doc.setTextColor(60, 60, 60);
+        doc.text(vendor.vendorName.substring(0, 25), 14, finalY);
+        
+        // Draw bar
+        doc.setFillColor(41, 128, 185);
+        doc.rect(90, finalY - 3, barWidth, 4, 'F');
+        
+        // Value
+        doc.text(formatCurrency(vendor.calculatedTCO, vendor.currency), 245, finalY);
+        finalY += 8;
+      });
+      
+      // Risk Score Comparison
+      finalY += 10;
+      if (finalY > doc.internal.pageSize.height - 80) {
+        doc.addPage();
+        finalY = 20;
+      }
+      
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Risk Score Comparison:', 14, finalY);
+      finalY += 8;
+      doc.setFontSize(9);
+      
+      // Sort vendors by risk score for chart
+      const sortedByRisk = [...vendorResults].sort((a, b) => b.riskScore - a.riskScore);
+      const maxRisk = 100;
+      
+      sortedByRisk.forEach((vendor) => {
+        if (finalY > doc.internal.pageSize.height - 30) {
+          doc.addPage();
+          finalY = 20;
+        }
+        
+        const barWidth = (vendor.riskScore / maxRisk) * 150;
+        doc.setTextColor(60, 60, 60);
+        doc.text(vendor.vendorName.substring(0, 25), 14, finalY);
+        
+        // Draw bar with color based on risk level
+        if (vendor.riskScore >= 70) {
+          doc.setFillColor(220, 38, 38); // Red
+        } else if (vendor.riskScore >= 40) {
+          doc.setFillColor(234, 179, 8); // Yellow
+        } else {
+          doc.setFillColor(34, 197, 94); // Green
+        }
+        doc.rect(90, finalY - 3, barWidth, 4, 'F');
+        
+        // Value
+        doc.text(`${vendor.riskScore}/100`, 245, finalY);
+        finalY += 8;
+      });
+      
+      // Data Gaps & Alerts Section (if available)
+      if (uploadedFiles.some(f => f.dataGaps?.length > 0 || f.alerts?.length > 0)) {
+        finalY += 15;
+        if (finalY > doc.internal.pageSize.height - 100) {
+          doc.addPage();
+          finalY = 20;
+        }
+        
+        doc.setFontSize(14);
+        doc.setTextColor(234, 179, 8); // Yellow/Warning color
+        doc.text('Data Gaps & Alerts', 14, finalY);
+        finalY += 10;
+        doc.setFontSize(9);
+        doc.setTextColor(60, 60, 60);
+        
+        uploadedFiles.forEach((file) => {
+          if (file.dataGaps && file.dataGaps.length > 0) {
+            if (finalY > doc.internal.pageSize.height - 50) {
+              doc.addPage();
+              finalY = 20;
+            }
+            
+            doc.setFontSize(10);
+            doc.setTextColor(0, 0, 0);
+            doc.text(`${file.file.name}:`, 14, finalY);
+            finalY += 6;
+            doc.setFontSize(9);
+            doc.setTextColor(60, 60, 60);
+            
+            file.dataGaps.forEach((gap: string) => {
+              if (finalY > doc.internal.pageSize.height - 30) {
+                doc.addPage();
+                finalY = 20;
+              }
+              const bulletPoint = String.fromCharCode(8226);
+              doc.text(`${bulletPoint} ${gap}`, 18, finalY);
+              finalY += 5;
+            });
+            finalY += 3;
+          }
+          
+          if (file.alerts && file.alerts.length > 0) {
+            if (finalY > doc.internal.pageSize.height - 50) {
+              doc.addPage();
+              finalY = 20;
+            }
+            
+            file.alerts.forEach((alert: string) => {
+              if (finalY > doc.internal.pageSize.height - 30) {
+                doc.addPage();
+                finalY = 20;
+              }
+              const bulletPoint = String.fromCharCode(9888); // Warning symbol
+              doc.setTextColor(234, 179, 8);
+              doc.text(`${bulletPoint} ${alert}`, 18, finalY);
+              doc.setTextColor(60, 60, 60);
+              finalY += 5;
+            });
+            finalY += 3;
+          }
+        });
+      }
       
       // Risk Analysis Section
-      let riskY = finalY + 35;
+      let riskY = finalY + 15;
+      if (riskY > doc.internal.pageSize.height - 100) {
+        doc.addPage();
+        riskY = 20;
+      }
       doc.setFontSize(14);
       doc.setTextColor(0, 0, 0);
       doc.text('Risk Score Analysis', 14, riskY);
