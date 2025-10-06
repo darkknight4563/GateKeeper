@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
-import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.3.136";
+import { getDocument } from "https://esm.sh/pdfjs-dist@4.3.136/legacy/build/pdf.mjs";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') ?? '*',
@@ -27,14 +27,11 @@ interface Fragment {
 // PDF parser - extracts text from PDF using pdfjs in no-worker mode
 async function parsePdf(bytes: Uint8Array, filename: string): Promise<Fragment[]> {
   try {
-    // Disable worker in Edge/Deno - must be called before getDocument
-    const loadingTask = (pdfjsLib as any).getDocument({ 
+    // Disable worker in Edge/Deno - use legacy build and no worker
+    const pdf = await (getDocument as any)({ 
       data: bytes, 
-      useWorker: false,
-      isEvalSupported: false,
-      useSystemFonts: true
-    });
-    const pdf = await loadingTask.promise;
+      useWorker: false
+    }).promise;
 
     const out: Array<{ source: string; text: string }> = [];
     for (let p = 1; p <= pdf.numPages; p++) {
