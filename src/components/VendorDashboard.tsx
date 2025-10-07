@@ -39,6 +39,15 @@ const VendorDashboard: React.FC = () => {
       
       // Import supabase client
       const { supabase } = await import('@/integrations/supabase/client');
+
+      // Ensure user is authenticated (required for RLS)
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
+        toast.error('Please sign in to process documents');
+        setIsProcessing(false);
+        return;
+      }
+      const currentUser = userData.user;
       
       // Process each file through the full pipeline
       const processedDocs = await Promise.all(files.map(async (file) => {
@@ -46,7 +55,7 @@ const VendorDashboard: React.FC = () => {
           console.log(`Processing ${file.name}...`);
           
           // 1. Upload to storage
-          const filePath = `${crypto.randomUUID()}/${file.name}`;
+          const filePath = `${currentUser.id}/${crypto.randomUUID()}_${file.name}`;
           const { error: uploadError } = await supabase.storage
             .from('procurement-documents')
             .upload(filePath, file);
@@ -64,7 +73,8 @@ const VendorDashboard: React.FC = () => {
               file_path: filePath,
               mime_type: file.type,
               file_size: file.size,
-              upload_status: 'pending'
+              upload_status: 'pending',
+              user_id: currentUser.id,
             })
             .select()
             .single();
