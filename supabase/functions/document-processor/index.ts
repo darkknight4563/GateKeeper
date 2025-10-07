@@ -51,6 +51,51 @@ const ExtractedDataSchema = z.object({
   certifications: z.array(z.string()).optional(),
 })
 
+// Currency normalization helper
+function normalizeCurrency(currency: string | null): string {
+  if (!currency) return 'USD';
+  
+  const normalized = currency.toLowerCase().trim();
+  
+  // Map common currency phrases to ISO codes
+  const currencyMap: Record<string, string> = {
+    'usd dollars': 'USD',
+    'usd dollar': 'USD',
+    'us dollars': 'USD',
+    'us dollar': 'USD',
+    'norwegian kroner': 'NOK',
+    'norwegian krone': 'NOK',
+    'euro': 'EUR',
+    'euros': 'EUR',
+    'british pound': 'GBP',
+    'pound sterling': 'GBP',
+    'japanese yen': 'JPY',
+    'chinese yuan': 'CNY',
+    'swiss franc': 'CHF',
+    'canadian dollar': 'CAD',
+    'australian dollar': 'AUD',
+    'swedish krona': 'SEK',
+    'danish krone': 'DKK',
+  };
+  
+  // Check if it's already a valid 3-letter ISO code
+  if (/^[A-Z]{3}$/i.test(currency)) {
+    return currency.toUpperCase();
+  }
+  
+  // Check the mapping
+  const mapped = currencyMap[normalized];
+  if (mapped) return mapped;
+  
+  // If no match, try to extract 3-letter code from the string
+  const match = currency.match(/\b([A-Z]{3})\b/i);
+  if (match) return match[1].toUpperCase();
+  
+  // Default to USD if we can't determine
+  console.warn(`Unknown currency format: "${currency}", defaulting to USD`);
+  return 'USD';
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') ?? '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -484,7 +529,7 @@ Return ONLY valid JSON matching the schema above. No markdown, no explanations.`
       supplier: firstDoc.supplier || null,
       document_type: null,
       date: null,
-      currency: firstDoc.currency || null,
+      currency: normalizeCurrency(firstDoc.currency),
       items: items,
       terms: {
         payment: firstDoc.terms?.payment_terms,
