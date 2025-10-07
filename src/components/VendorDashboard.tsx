@@ -140,10 +140,11 @@ const VendorDashboard: React.FC = () => {
         const extracted = doc.extracted;
         const file = doc.file;
         
-        // Get the first document from the extracted results
-        const firstDoc = extracted?.documents?.[0];
+        console.log(`Processing extracted data for ${file.name}:`, extracted);
         
-        if (!firstDoc) {
+        // The document-processor returns data in this format:
+        // { vendor_name, quoted_price, currency, items_count, quoted_lead_time, technical_specs, issues, etc. }
+        if (!extracted || typeof extracted !== 'object') {
           console.warn(`No extracted data for ${file.name}`);
           return {
             fileName: file.name,
@@ -160,22 +161,25 @@ const VendorDashboard: React.FC = () => {
         }
         
         // Extract data from AI-processed result
-        const supplier = firstDoc.supplier || file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
-        const currency = firstDoc.currency || 'EUR';
-        const quotedPrice = firstDoc.totals?.quoted_price || 0;
+        const supplier = extracted.vendor_name || file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+        const currency = extracted.currency || 'EUR';
+        const quotedPrice = extracted.quoted_price || 0;
         
-        // Calculate lead time from delivery weeks
-        const leadDays = firstDoc.terms?.delivery_weeks 
-          ? firstDoc.terms.delivery_weeks * 7 
+        // Calculate lead time from quoted_lead_time (in weeks)
+        const leadDays = extracted.quoted_lead_time 
+          ? extracted.quoted_lead_time * 7 
           : 280; // default 40 weeks
         
         // Extract technical specifications
-        const technicalSpecs = firstDoc.technical_specs || null;
+        const technicalSpecs = extracted.technical_specs || null;
         
-        // Build issues list from notes
+        // Build issues list
         const issues: string[] = [];
-        if (extracted.notes && Array.isArray(extracted.notes)) {
-          issues.push(...extracted.notes.filter((n: string) => n.includes('[Data Gap]')));
+        if (extracted.issues && Array.isArray(extracted.issues)) {
+          issues.push(...extracted.issues);
+        }
+        if (extracted.clarifications && Array.isArray(extracted.clarifications)) {
+          issues.push(...extracted.clarifications.map((c: string) => `[Data Gap] ${c}`));
         }
         if (quotedPrice === 0) {
           issues.push('No quoted price found in document');
@@ -189,9 +193,9 @@ const VendorDashboard: React.FC = () => {
           leadDays,
           manufacturer: technicalSpecs?.manufacturer || '',
           productionCountry: technicalSpecs?.production_country || '',
-          fragmentsCount: firstDoc.line_items?.length || 0,
+          fragmentsCount: extracted.items_count || 0,
           technicalSpecs,
-          issues
+          issues: issues.length > 0 ? issues : undefined
         };
       });
 
