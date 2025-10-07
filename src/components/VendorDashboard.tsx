@@ -142,9 +142,9 @@ const VendorDashboard: React.FC = () => {
         
         console.log(`Processing extracted data for ${file.name}:`, extracted);
         
-        // The document-processor returns data in this format:
-        // { vendor_name, quoted_price, currency, items_count, quoted_lead_time, technical_specs, issues, etc. }
-        if (!extracted || typeof extracted !== 'object') {
+        // Support both new and legacy shapes
+        const vd = extracted?.vendor_data ?? extracted;
+        if (!vd || typeof vd !== 'object') {
           console.warn(`No extracted data for ${file.name}`);
           return {
             fileName: file.name,
@@ -160,30 +160,24 @@ const VendorDashboard: React.FC = () => {
           };
         }
         
-        // Extract data from AI-processed result
-        const supplier = extracted.vendor_name || file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
-        const currency = extracted.currency || 'EUR';
-        const quotedPrice = extracted.quoted_price || 0;
+        // Extract fields
+        const supplier = vd.vendor_name || vd.supplier || file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+        const currency = vd.currency || 'EUR';
+        const quotedPriceRaw = vd.quoted_price ?? vd.quoted_total ?? 0;
+        const quotedPrice = typeof quotedPriceRaw === 'string' ? Number(quotedPriceRaw.replace(/[^0-9.]/g, '')) : Number(quotedPriceRaw) || 0;
         
-        // Calculate lead time from quoted_lead_time (in weeks)
-        const leadDays = extracted.quoted_lead_time 
-          ? extracted.quoted_lead_time * 7 
-          : 280; // default 40 weeks
+        // Lead time (weeks -> days)
+        const leadWeeks = vd.quoted_lead_time ?? vd.terms?.delivery_weeks ?? null;
+        const leadDays = leadWeeks ? Number(leadWeeks) * 7 : 280;
         
-        // Extract technical specifications
-        const technicalSpecs = extracted.technical_specs || null;
+        // Technical specs
+        const technicalSpecs = vd.technical_specs || null;
         
-        // Build issues list
+        // Issues/clarifications
         const issues: string[] = [];
-        if (extracted.issues && Array.isArray(extracted.issues)) {
-          issues.push(...extracted.issues);
-        }
-        if (extracted.clarifications && Array.isArray(extracted.clarifications)) {
-          issues.push(...extracted.clarifications.map((c: string) => `[Data Gap] ${c}`));
-        }
-        if (quotedPrice === 0) {
-          issues.push('No quoted price found in document');
-        }
+        if (Array.isArray(vd.issues)) issues.push(...vd.issues);
+        if (Array.isArray(vd.clarifications)) issues.push(...vd.clarifications.map((c: string) => `[Data Gap] ${c}`));
+        if (!quotedPrice) issues.push('No quoted price found in document');
         
         return {
           fileName: file.name,
@@ -193,9 +187,9 @@ const VendorDashboard: React.FC = () => {
           leadDays,
           manufacturer: technicalSpecs?.manufacturer || '',
           productionCountry: technicalSpecs?.production_country || '',
-          fragmentsCount: extracted.items_count || 0,
+          fragmentsCount: vd.items_count ?? vd.items?.length ?? 0,
           technicalSpecs,
-          issues: issues.length > 0 ? issues : undefined
+          issues: issues.length > 0 ? issues : undefined,
         };
       });
 
