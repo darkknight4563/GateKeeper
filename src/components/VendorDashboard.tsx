@@ -35,95 +35,153 @@ const VendorDashboard: React.FC = () => {
       // Extract File objects from uploaded items
       const files: File[] = uploadedFiles.map((item: any) => item?.file ?? item);
 
-      // Process all files using ingest service
-      const results: any[] = await processFiles(files);
-      console.log('Ingest results:', results);
-
-      // Heuristic mapping of extracted fragments -> VendorData (one vendor per file)
-      const candidateVendors = files.map((file, idx) => {
-        const result = results[idx] || {};
-        const fragments: any[] = Array.isArray(result?.fragments) ? result.fragments : [];
-
-        const texts: string[] = [];
-        const nums: number[] = [];
-        const currenciesSeen = new Set<string>();
-        let manufacturer = '';
-        let productModel = '';
-        let productionCountry = '';
-
-        const pushNum = (n: any) => {
-          if (typeof n === 'number' && isFinite(n)) nums.push(n);
-          else if (typeof n === 'string') {
-            const cleaned = n.replace(/[^0-9.,\-]/g, '');
-            if (!cleaned) return;
-            let val = cleaned;
-            if (val.includes('.') && val.includes(',')) val = val.replace(/,/g, '');
-            else if (val.includes(',') && !val.includes('.')) val = val.replace(/,/g, '');
-            const parsed = parseFloat(val);
-            if (!isNaN(parsed) && isFinite(parsed)) nums.push(parsed);
+      console.log('Processing', files.length, 'files using AI extraction...');
+      
+      // Import supabase client
+      const { supabase } = await import('@/integrations/supabase/client');
+      
+      // Process each file through the full pipeline
+      const processedDocs = await Promise.all(files.map(async (file) => {
+        try {
+          console.log(`Processing ${file.name}...`);
+          
+          // 1. Upload to storage
+          const filePath = `${crypto.randomUUID()}/${file.name}`;
+          const { error: uploadError } = await supabase.storage
+            .from('procurement-documents')
+            .upload(filePath, file);
+          
+          if (uploadError) {
+            console.error('Upload error:', uploadError);
+            throw uploadError;
           }
-        };
-
-        for (const f of fragments) {
-          if (f?.text) {
-            const t = String(f.text);
-            texts.push(t);
-            if (/[€]/.test(t)) currenciesSeen.add('EUR');
-            if (/\bUSD\b|\$/i.test(t)) currenciesSeen.add('USD');
-            if (/\bNOK\b/i.test(t)) currenciesSeen.add('NOK');
-            // extract obvious big numbers
-            for (const m of t.matchAll(/[-+]?\d[\d.,]{3,}/g)) pushNum(m[0]);
-            
-            // Extract manufacturer info
-            if (t.toLowerCase().includes('produsent') || t.toLowerCase().includes('manufacturer')) {
-              const nextText = texts[texts.indexOf(t) + 1];
-              if (nextText && !manufacturer) manufacturer = nextText.trim();
-            }
-            
-            // Extract production country
-            if (t.toLowerCase().includes('produksjonsland') || t.toLowerCase().includes('production country')) {
-              const nextText = texts[texts.indexOf(t) + 1];
-              if (nextText && !productionCountry) productionCountry = nextText.trim();
-            }
+          
+          // 2. Create document record
+          const { data: docData, error: docError } = await supabase
+            .from('documents')
+            .insert({
+              filename: file.name,
+              file_path: filePath,
+              mime_type: file.type,
+              file_size: file.size,
+              upload_status: 'pending'
+            })
+            .select()
+            .single();
+          
+          if (docError || !docData) {
+            console.error('Document creation error:', docError);
+            throw docError;
           }
-          if (Array.isArray(f?.table)) {
-            for (const row of f.table as any[]) {
-              // Look for manufacturer and country in table rows
-              const rowText = row.join(' ');
-              if (rowText.match(/Philips|GE|Siemens/i) && !manufacturer) {
-                manufacturer = rowText.match(/Philips|GE|Siemens/i)?.[0] || '';
+          
+          // 3. Convert file to base64 for processing
+          const arrayBuffer = await file.arrayBuffer();
+          const bytes = new Uint8Array(arrayBuffer);
+          let binary = "";
+          const chunkSize = 0x8000;
+          for (let i = 0; i < bytes.length; i += chunkSize) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+          }
+          const base64 = btoa(binary);
+          
+          // 4. Call document-processor edge function for AI extraction
+          const { data: processorResult, error: processorError } = await supabase.functions.invoke(
+            'document-processor',
+            {
+              body: {
+                document_id: docData.id,
+                file_content: base64,
+                filename: file.name,
+                mime_type: file.type
               }
-              if (rowText.match(/USA|China|Norge|Denmark|Kina/i) && !productionCountry) {
-                productionCountry = rowText.match(/USA|China|Norge|Denmark|Kina/i)?.[0] || '';
-              }
-              
-              for (const cell of row as any[]) pushNum(cell);
             }
+          );
+          
+          if (processorError) {
+            console.error('Processor error:', processorError);
+            throw processorError;
           }
+          
+          console.log(`Processed ${file.name}:`, processorResult);
+          return {
+            file,
+            docData,
+            extracted: processorResult
+          };
+        } catch (error) {
+          console.error(`Failed to process ${file.name}:`, error);
+          toast.error(`Failed to process ${file.name}`);
+          return null;
         }
-
-        const currency = currenciesSeen.has('EUR') ? 'EUR' : currenciesSeen.has('NOK') ? 'NOK' : currenciesSeen.has('USD') ? 'USD' : 'EUR';
-        const priceCandidates = nums.filter(n => Math.abs(n) >= 1000).sort((a,b)=>b-a);
-        const quotedPrice = priceCandidates[0] ? Math.abs(priceCandidates[0]) : 0;
-
-        // Lead time detection (weeks/days)
-        let leadDays = 0;
-        const bigText = texts.join(' \n ');
-        const weeksMatch = bigText.match(/(\d{1,3})\s*(weeks|week|wks|wk)/i);
-        const daysMatch = bigText.match(/(\d{1,3})\s*(days|day)/i);
-        if (weeksMatch) leadDays = parseInt(weeksMatch[1], 10) * 7;
-        else if (daysMatch) leadDays = parseInt(daysMatch[1], 10);
-        if (!leadDays) leadDays = 280; // default 40 weeks if absent
-
+      }));
+      
+      // Filter out failed processings
+      const validDocs = processedDocs.filter(doc => doc !== null);
+      
+      if (validDocs.length === 0) {
+        toast.error('Failed to process any documents');
+        return;
+      }
+      
+      console.log('Valid processed docs:', validDocs);
+      
+      // Convert extracted data to VendorData format
+      const candidateVendors = validDocs.map((doc: any) => {
+        const extracted = doc.extracted;
+        const file = doc.file;
+        
+        // Get the first document from the extracted results
+        const firstDoc = extracted?.documents?.[0];
+        
+        if (!firstDoc) {
+          console.warn(`No extracted data for ${file.name}`);
+          return {
+            fileName: file.name,
+            supplier: 'Unknown',
+            currency: 'EUR',
+            quotedPrice: 0,
+            leadDays: 280,
+            manufacturer: '',
+            productionCountry: '',
+            fragmentsCount: 0,
+            technicalSpecs: null,
+            issues: ['Failed to extract data from document']
+          };
+        }
+        
+        // Extract data from AI-processed result
+        const supplier = firstDoc.supplier || file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+        const currency = firstDoc.currency || 'EUR';
+        const quotedPrice = firstDoc.totals?.quoted_price || 0;
+        
+        // Calculate lead time from delivery weeks
+        const leadDays = firstDoc.terms?.delivery_weeks 
+          ? firstDoc.terms.delivery_weeks * 7 
+          : 280; // default 40 weeks
+        
+        // Extract technical specifications
+        const technicalSpecs = firstDoc.technical_specs || null;
+        
+        // Build issues list from notes
+        const issues: string[] = [];
+        if (extracted.notes && Array.isArray(extracted.notes)) {
+          issues.push(...extracted.notes.filter((n: string) => n.includes('[Data Gap]')));
+        }
+        if (quotedPrice === 0) {
+          issues.push('No quoted price found in document');
+        }
+        
         return {
           fileName: file.name,
-          fragmentsCount: fragments.length,
-          nums,
+          supplier,
           currency,
           quotedPrice,
           leadDays,
-          manufacturer,
-          productionCountry,
+          manufacturer: technicalSpecs?.manufacturer || '',
+          productionCountry: technicalSpecs?.production_country || '',
+          fragmentsCount: firstDoc.line_items?.length || 0,
+          technicalSpecs,
+          issues
         };
       });
 
@@ -137,7 +195,7 @@ const VendorDashboard: React.FC = () => {
       const norm = (v: number, min: number, max: number) => (max > min ? (v - min) / (max - min) : 0);
 
       const vendors: VendorData[] = candidateVendors.map((v, i) => {
-        const vendorName = v.fileName.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+        const vendorName = v.supplier || v.fileName.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
         const price = v.quotedPrice || 0;
         const ship = Math.round(price * 0.02);
         const handling = Math.round(price * 0.015);
@@ -192,15 +250,23 @@ const VendorDashboard: React.FC = () => {
         }
         riskFactors.push(`= ${totalRiskScore} Total Risk Score`);
 
-        const issues: string[] = [];
-        if (!price) issues.push('No clear total price detected in the document');
-        if (v.fragmentsCount === 0) issues.push('No extractable content was found');
-
         // Build technical specs from extracted data
         const technicalSpecs: any = {};
+        
+        // If we have technical specs from AI extraction, use them
+        if (v.technicalSpecs) {
+          Object.assign(technicalSpecs, v.technicalSpecs);
+        }
+        
+        // Add additional metadata
         if (v.manufacturer) technicalSpecs.manufacturer = v.manufacturer;
         if (v.productionCountry) technicalSpecs.productionCountry = v.productionCountry;
-        technicalSpecs.documentComplexity = `${v.fragmentsCount} data sections`;
+        if (v.fragmentsCount) technicalSpecs.documentComplexity = `${v.fragmentsCount} line items`;
+
+        // Combine issues from extraction and validation
+        const issues: string[] = [...(v.issues || [])];
+        if (!price) issues.push('No clear total price detected in the document');
+        if (v.fragmentsCount === 0) issues.push('No extractable content was found');
 
         return {
           id: `vendor-${i}`,
@@ -209,7 +275,7 @@ const VendorDashboard: React.FC = () => {
           calculatedTCO,
           leadTime: v.leadDays,
           riskScore: totalRiskScore,
-          items: 1,
+          items: v.fragmentsCount || 1,
           currency: v.currency,
           riskFactors,
           tcoBreakdown: {
@@ -220,7 +286,7 @@ const VendorDashboard: React.FC = () => {
             qualityAdjustment,
           },
           technicalSpecs: Object.keys(technicalSpecs).length > 0 ? technicalSpecs : undefined,
-          issues,
+          issues: issues.length > 0 ? issues : undefined,
         } as VendorData;
       });
 
