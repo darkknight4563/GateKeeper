@@ -11,6 +11,7 @@ No employer or client drawings are included. Everything here comes from public d
 | `source_xml/` | The DEXPI (Proteus XML) source behind each drawing. Machine-readable truth |
 | `seed_xml_no_drawing/` | 32 small DEXPI unit-test cases (single tanks, pumps, instrument loops), with XML only and no drawing. Seeds for synthetic generation |
 | `SPEC.md` | **Build spec for the coding agent. Start here.** |
+| `KICKOFF.md` | The Day 0 prompt to paste into the coding agent |
 | `scripts/build_gt.py` | Regenerates the answer keys: `python3 build_gt.py <dexpi example dir> <out dir>` |
 | `scripts/score.py` | Deterministic scorer (prediction vs answer key). `python3 score.py ground_truth/ predictions/` |
 | `scripts/line_parse.py` | Line-label parser (DEXPI reference, BASF, Equinor formats), with self-tests: `python3 line_parse.py` |
