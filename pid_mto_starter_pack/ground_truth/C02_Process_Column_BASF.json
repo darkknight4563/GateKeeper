@@ -1,0 +1,172 @@
+{
+  "case": "C02_Process_Column_BASF",
+  "source_xml": "C02_Process_Column_BASF.xml",
+  "lines": [
+    {
+      "LineNumber": "2750.001.6",
+      "NominalDiameterNumericalValueRepresentation": "150",
+      "PipingClassCode": "10HB25T10B1",
+      "FluidCode": "2170.8503",
+      "raw_label": "2750.001.6-0N-2170.8503-150/10HB25T10B1-B40-",
+      "format": "basf"
+    }
+  ],
+  "valves": [
+    {
+      "id": "OperatedValve-1",
+      "class": null,
+      "dn": "80",
+      "piping_class": "AS9",
+      "line": null,
+      "tag": "H672B1V",
+      "raw_label": "H672B1V | 80 | AS9",
+      "actuated": false
+    },
+    {
+      "id": "OperatedValve-2",
+      "class": null,
+      "dn": "25",
+      "piping_class": "AS9",
+      "line": null,
+      "tag": "H658B1UV",
+      "raw_label": "H658B1UV | 2170.8503 | 25 | AS9",
+      "actuated": false
+    },
+    {
+      "id": "OperatedValve-3",
+      "class": null,
+      "dn": "25",
+      "piping_class": "AS9",
+      "line": null,
+      "tag": "H658B1UV",
+      "raw_label": "H658B1UV | 2170.8503 | 25 | AS9",
+      "actuated": false
+    }
+  ],
+  "piping_items": [
+    {
+      "id": "PipeReducer-1",
+      "class": "PipeReducer",
+      "dn": "200",
+      "piping_class": "10HB25T10B1",
+      "line": "2750.001.6",
+      "tag": null,
+      "raw_label": "200/150",
+      "actuated": false
+    },
+    {
+      "id": "PipeTee-1",
+      "class": "PipeTee",
+      "dn": "150",
+      "piping_class": null,
+      "line": null,
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    },
+    {
+      "id": "BlindFlange-1",
+      "class": "BlindFlange",
+      "dn": "80",
+      "piping_class": null,
+      "line": null,
+      "tag": null,
+      "raw_label": "80/25",
+      "actuated": false
+    },
+    {
+      "id": "BlindFlange-2",
+      "class": "BlindFlange",
+      "dn": "25",
+      "piping_class": null,
+      "line": null,
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    },
+    {
+      "id": "BlindFlange-3",
+      "class": "BlindFlange",
+      "dn": "80",
+      "piping_class": null,
+      "line": null,
+      "tag": null,
+      "raw_label": "80/25",
+      "actuated": false
+    },
+    {
+      "id": "BlindFlange-4",
+      "class": "BlindFlange",
+      "dn": "25",
+      "piping_class": null,
+      "line": null,
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    }
+  ],
+  "instruments": [
+    {
+      "category": "P",
+      "functions": "IS+Z+A",
+      "number": "275003"
+    },
+    {
+      "category": "P",
+      "functions": "I(Z)",
+      "number": "275003A"
+    },
+    {
+      "category": "P",
+      "functions": "I(Z)",
+      "number": "275003B"
+    }
+  ],
+  "equipment": [
+    {
+      "class": "ProcessColumn",
+      "tag": "K 2750"
+    },
+    {
+      "class": "Chamber",
+      "tag": null
+    },
+    {
+      "class": "ColumnSection",
+      "tag": null
+    },
+    {
+      "class": "ColumnPackingsArrangement",
+      "tag": null
+    },
+    {
+      "class": "ColumnSection",
+      "tag": "KX 2750"
+    },
+    {
+      "class": "ColumnPackingsArrangement",
+      "tag": null
+    },
+    {
+      "class": null,
+      "tag": null
+    },
+    {
+      "class": null,
+      "tag": null
+    }
+  ],
+  "scoring_notes": [
+    "PipeTee-1: line '*at N3*' not printed on drawing -> line=null",
+    "OperatedValve-1: line '*at N3*' not printed on drawing -> line=null",
+    "OperatedValve-1: DEXPI 'OperatedValve' drawn as a generic valve with no actuator -> class=null",
+    "BlindFlange-1: line '*at P3*' not printed on drawing -> line=null",
+    "OperatedValve-2: line '*at P3*' not printed on drawing -> line=null",
+    "OperatedValve-2: DEXPI 'OperatedValve' drawn as a generic valve with no actuator -> class=null",
+    "BlindFlange-2: line '*at P3*' not printed on drawing -> line=null",
+    "BlindFlange-3: line '*at P4*' not printed on drawing -> line=null",
+    "OperatedValve-3: line '*at P4*' not printed on drawing -> line=null",
+    "OperatedValve-3: DEXPI 'OperatedValve' drawn as a generic valve with no actuator -> class=null",
+    "BlindFlange-4: line '*at P4*' not printed on drawing -> line=null"
+  ]
+}

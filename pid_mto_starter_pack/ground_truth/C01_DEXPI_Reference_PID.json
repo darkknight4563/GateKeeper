@@ -1,0 +1,408 @@
+{
+  "case": "C01_DEXPI_Reference_PID",
+  "source_xml": "C01_DEXPI_Reference_PID.xml",
+  "lines": [
+    {
+      "LineNumber": "47121",
+      "NominalDiameterNumericalValueRepresentation": "80",
+      "PipingClassCode": "75HB13",
+      "FluidCode": "MNb",
+      "raw_label": "MNb 47121 75HB13 80",
+      "format": "dexpi_ref"
+    },
+    {
+      "LineNumber": "47122",
+      "NominalDiameterNumericalValueRepresentation": "80",
+      "PipingClassCode": "75HB13",
+      "FluidCode": "MNb",
+      "raw_label": "MNb 47122 75HB13 80",
+      "format": "dexpi_ref"
+    },
+    {
+      "LineNumber": "47123",
+      "NominalDiameterNumericalValueRepresentation": "80",
+      "PipingClassCode": "75HB13",
+      "FluidCode": "MNb",
+      "raw_label": "MNb 47123 75HB13 80",
+      "format": "dexpi_ref"
+    },
+    {
+      "LineNumber": "47124",
+      "NominalDiameterNumericalValueRepresentation": "80",
+      "PipingClassCode": "75HB13",
+      "FluidCode": "MNc",
+      "raw_label": "MNc 47124 75HB13 80",
+      "format": "dexpi_ref"
+    },
+    {
+      "LineNumber": "47125",
+      "NominalDiameterNumericalValueRepresentation": "25",
+      "PipingClassCode": "73HG12",
+      "FluidCode": "MNc",
+      "raw_label": "MNc 47125 73HG12 25",
+      "format": "dexpi_ref"
+    },
+    {
+      "LineNumber": "47125",
+      "NominalDiameterNumericalValueRepresentation": "50",
+      "PipingClassCode": "75HB13",
+      "FluidCode": "MNc",
+      "raw_label": "MNc 47125 75HB13 50",
+      "format": "dexpi_ref"
+    },
+    {
+      "LineNumber": "47126",
+      "NominalDiameterNumericalValueRepresentation": "50",
+      "PipingClassCode": "75HB13",
+      "FluidCode": "MNc",
+      "raw_label": "MNc 47126 75HB13 50",
+      "format": "dexpi_ref"
+    },
+    {
+      "LineNumber": "47127",
+      "NominalDiameterNumericalValueRepresentation": "50",
+      "PipingClassCode": "75HB13",
+      "FluidCode": "MNc",
+      "raw_label": "MNc 47127 75HB13 50 Q 80",
+      "format": "dexpi_ref"
+    },
+    {
+      "LineNumber": "47130",
+      "NominalDiameterNumericalValueRepresentation": "50",
+      "PipingClassCode": "75HB13",
+      "FluidCode": "WKa",
+      "raw_label": "WKa 47130 75HB13 50",
+      "format": "dexpi_ref"
+    },
+    {
+      "LineNumber": "47131",
+      "NominalDiameterNumericalValueRepresentation": "50",
+      "PipingClassCode": "75HB13",
+      "FluidCode": "WKb",
+      "raw_label": "WKb 47131 75HB13 50",
+      "format": "dexpi_ref"
+    },
+    {
+      "LineNumber": "47140",
+      "NominalDiameterNumericalValueRepresentation": "50",
+      "PipingClassCode": "75HB13",
+      "FluidCode": "QSa",
+      "raw_label": "QSa 47140 75HB13 50 Q 80",
+      "format": "dexpi_ref"
+    },
+    {
+      "LineNumber": "47141",
+      "NominalDiameterNumericalValueRepresentation": "50",
+      "PipingClassCode": "75HB13",
+      "FluidCode": "QSb",
+      "raw_label": "QSb 47141 75HB13 50 Q 80",
+      "format": "dexpi_ref"
+    }
+  ],
+  "valves": [
+    {
+      "id": "GlobeValve-2",
+      "class": "GlobeValve",
+      "dn": "80",
+      "piping_class": "75HB13",
+      "line": "47123",
+      "tag": null,
+      "raw_label": null,
+      "actuated": true
+    },
+    {
+      "id": "ButterflyValve-1",
+      "class": "ButterflyValve",
+      "dn": "80",
+      "piping_class": "75HB13",
+      "line": "47124",
+      "tag": "66KL21",
+      "raw_label": "66KL21-80",
+      "actuated": false
+    },
+    {
+      "id": "SwingCheckValve-1",
+      "class": "SwingCheckValve",
+      "dn": "80",
+      "piping_class": "75HB13",
+      "line": "47124",
+      "tag": "75SA21",
+      "raw_label": "75SA21-80",
+      "actuated": false
+    },
+    {
+      "id": "BallValve-1",
+      "class": "BallValve",
+      "dn": "50",
+      "piping_class": null,
+      "line": "47124",
+      "tag": "73KH12",
+      "raw_label": "73KH12-50",
+      "actuated": false
+    },
+    {
+      "id": "SpringLoadedGlobeSafetyValve-1",
+      "class": "SpringLoadedGlobeSafetyValve",
+      "dn": "25",
+      "piping_class": "73HG12",
+      "line": "47125",
+      "tag": null,
+      "raw_label": "SV 104.01 | P = 6 barg | DN = 25/50",
+      "actuated": false
+    },
+    {
+      "id": "BallValve-2",
+      "class": "BallValve",
+      "dn": "25",
+      "piping_class": "75HB13",
+      "line": "47126",
+      "tag": "73KH12",
+      "raw_label": "73KH12-25",
+      "actuated": false
+    },
+    {
+      "id": "BallValve-3",
+      "class": "BallValve",
+      "dn": "25",
+      "piping_class": "75HB13",
+      "line": "47126",
+      "tag": "73KH12",
+      "raw_label": "73KH12-25",
+      "actuated": false
+    },
+    {
+      "id": "BallValve-4",
+      "class": "BallValve",
+      "dn": "50",
+      "piping_class": "75HB13",
+      "line": "47126",
+      "tag": "73KH12",
+      "raw_label": "73KH12-50",
+      "actuated": false
+    },
+    {
+      "id": "BallValve-5",
+      "class": "BallValve",
+      "dn": "25",
+      "piping_class": "75HB13",
+      "line": "47126",
+      "tag": "73KH12",
+      "raw_label": "73KH12-25",
+      "actuated": false
+    },
+    {
+      "id": "GlobeValve-1",
+      "class": "GlobeValve",
+      "dn": "50",
+      "piping_class": "75HB13",
+      "line": "47127",
+      "tag": null,
+      "raw_label": null,
+      "actuated": true
+    },
+    {
+      "id": "GlobeValve-3",
+      "class": "GlobeValve",
+      "dn": "50",
+      "piping_class": "75HB13",
+      "line": "47141",
+      "tag": null,
+      "raw_label": null,
+      "actuated": true
+    }
+  ],
+  "piping_items": [
+    {
+      "id": "PipeReducer-1",
+      "class": "PipeReducer",
+      "dn": "80",
+      "piping_class": null,
+      "line": "47124",
+      "tag": null,
+      "raw_label": "80/50",
+      "actuated": false
+    },
+    {
+      "id": "PipeTee-2",
+      "class": "PipeTee",
+      "dn": "50",
+      "piping_class": "75HB13",
+      "line": "47126",
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    },
+    {
+      "id": "PipeTee-1",
+      "class": "PipeTee",
+      "dn": "50",
+      "piping_class": "75HB13",
+      "line": "47126",
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    },
+    {
+      "id": "PipeTee-3",
+      "class": "PipeTee",
+      "dn": "50",
+      "piping_class": "75HB13",
+      "line": "47126",
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    },
+    {
+      "id": "BlindFlange-1",
+      "class": "BlindFlange",
+      "dn": "25",
+      "piping_class": "75HB13",
+      "line": "47126",
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    },
+    {
+      "id": "PipeTee-4",
+      "class": "PipeTee",
+      "dn": "50",
+      "piping_class": "75HB13",
+      "line": "47126",
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    },
+    {
+      "id": "PipeTee-5",
+      "class": "PipeTee",
+      "dn": "50",
+      "piping_class": "75HB13",
+      "line": "47126",
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    },
+    {
+      "id": "BlindFlange-2",
+      "class": "BlindFlange",
+      "dn": "25",
+      "piping_class": "75HB13",
+      "line": "47126",
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    }
+  ],
+  "instruments": [
+    {
+      "category": "P",
+      "functions": "I",
+      "number": "4712.01"
+    },
+    {
+      "category": "P",
+      "functions": "ICSA",
+      "number": "4712.02"
+    },
+    {
+      "category": "H",
+      "functions": "S",
+      "number": "4750.01"
+    },
+    {
+      "category": "T",
+      "functions": "ICSA",
+      "number": "4750.03"
+    }
+  ],
+  "equipment": [
+    {
+      "class": "PlateHeatExchanger",
+      "tag": "H1007"
+    },
+    {
+      "class": "Chamber",
+      "tag": null
+    },
+    {
+      "class": "Chamber",
+      "tag": null
+    },
+    {
+      "class": "TubularHeatExchanger",
+      "tag": "H1008"
+    },
+    {
+      "class": "Chamber",
+      "tag": null
+    },
+    {
+      "class": "Chamber",
+      "tag": null
+    },
+    {
+      "class": "TubeBundle",
+      "tag": null
+    },
+    {
+      "class": "CentrifugalPump",
+      "tag": "P4711"
+    },
+    {
+      "class": "Chamber",
+      "tag": null
+    },
+    {
+      "class": "Impeller",
+      "tag": null
+    },
+    {
+      "class": "ReciprocatingPump",
+      "tag": "P4712"
+    },
+    {
+      "class": "Chamber",
+      "tag": null
+    },
+    {
+      "class": "Displacer",
+      "tag": null
+    },
+    {
+      "class": "Tank",
+      "tag": "T4750"
+    },
+    {
+      "class": "Chamber",
+      "tag": null
+    },
+    {
+      "class": "Chamber",
+      "tag": null
+    },
+    {
+      "class": null,
+      "tag": null
+    },
+    {
+      "class": null,
+      "tag": null
+    },
+    {
+      "class": null,
+      "tag": null
+    },
+    {
+      "class": null,
+      "tag": null
+    },
+    {
+      "class": null,
+      "tag": null
+    }
+  ],
+  "scoring_notes": [
+    "PipeReducer-1: piping class 73HG12 not readable from drawing for line 47124 -> piping_class=null",
+    "BallValve-1: piping class 73HG12 not readable from drawing for line 47124 -> piping_class=null"
+  ]
+}

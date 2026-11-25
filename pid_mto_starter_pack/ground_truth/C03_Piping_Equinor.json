@@ -1,0 +1,128 @@
+{
+  "case": "C03_Piping_Equinor",
+  "source_xml": "C03_Piping_Equinor.xml",
+  "lines": [
+    {
+      "LineNumber": "13L37014A",
+      "NominalDiameterNumericalValueRepresentation": "200",
+      "PipingClassCode": "FD120",
+      "FluidCode": "PB",
+      "raw_label": "D-13L37014A-0200PB-FD120-0F000N",
+      "format": "equinor"
+    },
+    {
+      "LineNumber": "13L37007A",
+      "NominalDiameterNumericalValueRepresentation": "200",
+      "PipingClassCode": "FS720",
+      "FluidCode": "PB",
+      "raw_label": "D-13L37007A-0200PB-FS720-0F000N",
+      "format": "equinor"
+    },
+    {
+      "LineNumber": "43L37007A",
+      "NominalDiameterNumericalValueRepresentation": "800",
+      "PipingClassCode": "AS7F0",
+      "FluidCode": "VF",
+      "raw_label": "D-43L37007A-0800VF-AS7F0-0F000N",
+      "format": "equinor"
+    }
+  ],
+  "valves": [
+    {
+      "id": "OperatedValve-1",
+      "class": "OperatedValve",
+      "dn": "0200",
+      "piping_class": "FD120",
+      "line": "13L37014A",
+      "tag": null,
+      "raw_label": null,
+      "actuated": true
+    },
+    {
+      "id": "BallValve-1",
+      "class": "BallValve",
+      "dn": "0200",
+      "piping_class": "FS720",
+      "line": "13L37007A",
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    }
+  ],
+  "piping_items": [
+    {
+      "id": "BlindFlange-1",
+      "class": "BlindFlange",
+      "dn": "0200",
+      "piping_class": null,
+      "line": "13L37014A",
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    },
+    {
+      "id": "Flange-1",
+      "class": "Flange",
+      "dn": "0200",
+      "piping_class": null,
+      "line": "13L37014A",
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    },
+    {
+      "id": "Flange-2",
+      "class": "Flange",
+      "dn": "0200",
+      "piping_class": null,
+      "line": "13L37014A",
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    },
+    {
+      "id": "Flange-3",
+      "class": "Flange",
+      "dn": "0200",
+      "piping_class": "FS720",
+      "line": "13L37007A",
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    },
+    {
+      "id": "RestrictionOrifice-1",
+      "class": "RestrictionOrifice",
+      "dn": "0200",
+      "piping_class": "FS720",
+      "line": "13L37007A",
+      "tag": null,
+      "raw_label": null,
+      "actuated": false
+    },
+    {
+      "id": "PipeReducer-1",
+      "class": "PipeReducer",
+      "dn": "0200",
+      "piping_class": "AS7F0",
+      "line": "43L37007A",
+      "tag": null,
+      "raw_label": "0200x0800",
+      "actuated": false
+    }
+  ],
+  "instruments": [
+    {
+      "category": "E",
+      "functions": "SV",
+      "number": "3712"
+    }
+  ],
+  "equipment": [],
+  "scoring_notes": [
+    "PipeFitting-1: piping class FD220 not readable from drawing for line 13L37014A -> piping_class=null",
+    "BlindFlange-1: piping class FD220 not readable from drawing for line 13L37014A -> piping_class=null",
+    "Flange-1: piping class FD220 not readable from drawing for line 13L37014A -> piping_class=null",
+    "Flange-2: piping class FD220 not readable from drawing for line 13L37014A -> piping_class=null"
+  ]
+}
